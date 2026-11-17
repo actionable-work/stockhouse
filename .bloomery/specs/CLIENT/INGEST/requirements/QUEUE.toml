@@ -153,3 +153,14 @@ type = "event"
 trigger = "a queue write finds its staging name in `tmp/` already taken by a file a crashed process left behind"
 system = "queue"
 action = "stage under the next free name, complete the write and leave the stale file untouched"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-015"
+title = "A path blocked by a corrupt record is recorded as overflow"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a path is enqueued while its pending record is unreadable"
+system = "queue"
+action = "return `Overflow`, leave the unreadable record untouched for quarantine and record the drop in the overflow marker so a later rescan enqueues the path"

@@ -62,6 +62,10 @@ removes its own file. Leftover staging files are never read.
 5. otherwise `Queued(id)` with a new `UploadId`, `attempts = 0` and
    `next_attempt_at = now`.
 
+If `pending/<hash>.json` exists but cannot be read, the name stays taken
+until the uploader quarantines the record. The enqueue then returns
+`Overflow` and appends to `overflow`, so a later rescan enqueues the path.
+
 The pending count is read once per producer batch (one hook invocation), so
 the bound is `max_pending` plus the paths of producers racing at once.
 Overflow records only a count: the rescan finds dropped paths from the store.

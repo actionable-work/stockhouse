@@ -365,3 +365,19 @@ fn interrupted_completions_are_reconciled() {
     assert!(uploader.jobs.borrow().is_empty());
     assert_eq!(q.status().unwrap().pending, 0);
 }
+
+#[cfg_attr(any(), bloomery("CLIENT-INGEST-QUEUE-015"))]
+#[test]
+fn a_corrupt_record_turns_enqueue_into_recorded_overflow() {
+    let q = queue(10);
+    let record = q
+        .root()
+        .join("pending")
+        .join(format!("{}.json", path("bad").hash()));
+    std::fs::write(&record, b"{not json").unwrap();
+    assert_eq!(enqueue(&q, "bad"), EnqueueOutcome::Overflow);
+    assert_eq!(std::fs::read(&record).unwrap(), b"{not json");
+    let overflow = q.overflow_status().unwrap();
+    assert!(overflow.active);
+    assert_eq!(overflow.dropped, 1);
+}

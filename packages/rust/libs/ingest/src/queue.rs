@@ -226,7 +226,9 @@ impl Producer<'_> {
         }
         match q.read_record(&target)? {
             Some(Ok(existing)) => Ok(EnqueueOutcome::AlreadyQueued(existing.id)),
-            _ => Ok(EnqueueOutcome::Overflow),
+            // An unreadable record holds the name until it is quarantined;
+            // the marker makes a later rescan enqueue the path again.
+            _ => self.overflow().map(|()| EnqueueOutcome::Overflow),
         }
     }
 

@@ -220,3 +220,21 @@ async fn unchecked_representations_pass_through() {
     let (status, _, body) = fetch(&s.proxy, &route(&entry)).await;
     assert_eq!((status, body), (200, Ok(entry.nar.clone())));
 }
+
+#[cfg_attr(any(), bloomery("CLIENT-PROXY-NAR-009"))]
+#[tokio::test]
+async fn unchecked_representations_that_end_early_never_complete() {
+    let s = setup().await;
+    let entry = Entry::compressed("cut", b"opaque xz bytes", false);
+    s.private.add(&entry);
+    s.private.set(
+        &entry.nar_url,
+        Reply {
+            content_length: Some(entry.nar.len() as u64 + 64),
+            ..Reply::ok(entry.nar.clone())
+        },
+    );
+    let (status, _, body) = fetch(&s.proxy, &route(&entry)).await;
+    assert_eq!(status, 200);
+    assert_eq!(body, Err(()), "a cut-short passthrough must not complete");
+}

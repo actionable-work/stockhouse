@@ -1,7 +1,9 @@
 //! A loopback HTTP fixture cache that records every request.
 
 use bytes::Bytes;
-use http_body_util::Full;
+use futures_util::StreamExt;
+use http_body_util::{Either, Full, StreamBody};
+use hyper::body::Frame;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request, Response, StatusCode};
@@ -11,12 +13,18 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::net::TcpListener;
 
+type FixtureFrames =
+    futures_util::stream::BoxStream<'static, Result<Frame<Bytes>, std::convert::Infallible>>;
+pub type FixtureBody = Either<Full<Bytes>, StreamBody<FixtureFrames>>;
+
 #[derive(Clone)]
 pub struct Reply {
     pub status: u16,
     pub body: Vec<u8>,
     pub delay: Duration,
     pub location: Option<String>,
+    /// A declared `Content-Length` that may differ from the body sent.
+    pub content_length: Option<u64>,
 }
 
 impl Reply {
@@ -26,6 +34,7 @@ impl Reply {
             body: body.into(),
             delay: Duration::ZERO,
             location: None,
+            content_length: None,
         }
     }
 
@@ -35,6 +44,7 @@ impl Reply {
             body: Vec::new(),
             delay: Duration::ZERO,
             location: None,
+            content_length: None,
         }
     }
 }
@@ -131,7 +141,7 @@ impl Fixture {
         }
     }
 
-    async fn respond<B>(&self, req: Request<B>) -> Response<Full<Bytes>> {
+    async fn respond<B>(&self, req: Request<B>) -> Response<FixtureBody> {
         let path = req.uri().path().to_owned();
         let authorization = req
             .headers()
@@ -150,8 +160,24 @@ impl Fixture {
             .cloned()
             .unwrap_or(Reply::status(404));
         tokio::time::sleep(reply.delay).await;
-        let mut response = Response::new(Full::new(Bytes::from(reply.body)));
+        // A declared length uses a body of unknown size, so hyper sends the
+        // header as given and ends the connection when the body runs out.
+        let body = if reply.content_length.is_some() {
+            // Pausing after the data lets hyper flush it before the short end.
+            let data = futures_util::stream::iter([Ok(Frame::data(Bytes::from(reply.body)))]);
+            let pause = futures_util::stream::once(tokio::time::sleep(Duration::from_millis(50)))
+                .filter_map(|()| async { None });
+            Either::Right(StreamBody::new(data.chain(pause).boxed()))
+        } else {
+            Either::Left(Full::new(Bytes::from(reply.body)))
+        };
+        let mut response = Response::new(body);
         *response.status_mut() = StatusCode::from_u16(reply.status).unwrap();
+        if let Some(length) = reply.content_length {
+            response
+                .headers_mut()
+                .insert("content-length", length.into());
+        }
         if let Some(location) = reply.location {
             response
                 .headers_mut()
