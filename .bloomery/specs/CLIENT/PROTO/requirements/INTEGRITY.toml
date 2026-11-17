@@ -1,0 +1,56 @@
+group = "INTEGRITY"
+
+[[requirements]]
+id = "CLIENT-PROTO-INTEGRITY-001"
+title = "Matching content verifies"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a content verifier receives exactly the expected number of bytes with the expected SHA-256, in any chunking"
+system = "content verifier"
+action = "finish successfully"
+
+[[requirements]]
+id = "CLIENT-PROTO-INTEGRITY-002"
+title = "Excess content fails immediately"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a content verifier receives more bytes than expected"
+system = "content verifier"
+action = "return `IntegrityError::SizeExceeded` from the update that crosses the limit"
+
+[[requirements]]
+id = "CLIENT-PROTO-INTEGRITY-003"
+title = "Short or altered content fails at finish"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a content verifier finishes after fewer bytes than expected or with a different SHA-256"
+system = "content verifier"
+action = "return `IntegrityError::SizeMismatch` with expected and actual sizes, or `IntegrityError::HashMismatch`"
+
+[[requirements]]
+id = "CLIENT-PROTO-INTEGRITY-004"
+title = "Served integrity prefers FileHash"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "the served-representation integrity of a narinfo with `FileHash` or with `Compression: none` is selected"
+system = "narinfo integrity selection"
+action = "return `FileHash`/`FileSize` when present, otherwise `NarHash`/`NarSize`"
+
+[[requirements]]
+id = "CLIENT-PROTO-INTEGRITY-005"
+title = "Compressed representations without FileHash have no proxy check"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "the served-representation integrity is selected for a compressed narinfo without `FileHash`"
+system = "narinfo integrity selection"
+action = "return no check, leaving authenticity to Nix's verification of the signed `NarHash`"

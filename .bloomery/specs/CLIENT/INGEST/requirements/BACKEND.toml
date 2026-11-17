@@ -1,0 +1,45 @@
+group = "BACKEND"
+
+[[requirements]]
+id = "CLIENT-INGEST-BACKEND-001"
+title = "The default backend defers to the server slice"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the `deferred` backend receives a job"
+system = "deferred backend"
+action = "return `Deferred` with a message naming P2.08 without contacting anything"
+
+[[requirements]]
+id = "CLIENT-INGEST-BACKEND-002"
+title = "nix-copy success uploads"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the `nix-copy` backend's command exits 0"
+system = "nix-copy backend"
+action = "return `Uploaded`"
+
+[[requirements]]
+id = "CLIENT-INGEST-BACKEND-003"
+title = "nix-copy failure retries with a bounded message"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the `nix-copy` backend's command fails to start or exits nonzero"
+system = "nix-copy backend"
+action = "return `Retry(Transient)` with at most 512 bytes of the command's stderr"
+
+[[requirements]]
+id = "CLIENT-INGEST-BACKEND-004"
+title = "nix-copy passes only the destination and path"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the `nix-copy` backend runs its command"
+system = "nix-copy backend"
+action = "pass exactly `--extra-experimental-features`, `nix-command`, `copy`, `--to`, the configured destination and the store path as arguments"

@@ -1,0 +1,13 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "stockhouse-ingest"
+publish = false
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+stockhouse-proto = { workspace = true }
+toml = { workspace = true }

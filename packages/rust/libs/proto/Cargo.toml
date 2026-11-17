@@ -1,0 +1,16 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "stockhouse-proto"
+publish = false
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+base64 = { workspace = true }
+ed25519-dalek = { workspace = true }
+sha2 = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+ed25519-dalek = { workspace = true }

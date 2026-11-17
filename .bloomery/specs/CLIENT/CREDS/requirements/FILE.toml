@@ -1,0 +1,89 @@
+group = "FILE"
+
+[[requirements]]
+id = "CLIENT-CREDS-FILE-001"
+title = "An owner-only regular file yields its content"
+manual = false
+design = "design/credentials.md"
+[requirements.ears]
+type = "event"
+trigger = "an owner-only file source reads an absolute regular file owned by the effective UID with no group or other permission bits and visible-ASCII content"
+system = "owner-only file source"
+action = "return the content without one trailing newline"
+
+[[requirements]]
+id = "CLIENT-CREDS-FILE-002"
+title = "Relative and store paths are rejected"
+manual = false
+design = "design/credentials.md"
+[requirements.ears]
+type = "event"
+trigger = "an owner-only file source is configured with a relative path, a path with a `.` or `..` component, or a path under `/nix/store`"
+system = "owner-only file source"
+action = "return `CredentialError::RelativePath` or `CredentialError::InStore` without opening the path"
+
+[[requirements]]
+id = "CLIENT-CREDS-FILE-003"
+title = "Symbolic links are refused"
+manual = false
+design = "design/credentials.md"
+[requirements.ears]
+type = "event"
+trigger = "the configured credential path is a symbolic link"
+system = "owner-only file source"
+action = "return `CredentialError::Symlink` without following it"
+
+[[requirements]]
+id = "CLIENT-CREDS-FILE-004"
+title = "Missing and non-regular files are rejected"
+manual = false
+design = "design/credentials.md"
+[requirements.ears]
+type = "event"
+trigger = "the configured credential path does not exist or is not a regular file"
+system = "owner-only file source"
+action = "return `CredentialError::Missing` or `CredentialError::NotRegularFile` respectively"
+
+[[requirements]]
+id = "CLIENT-CREDS-FILE-005"
+title = "Group or world permissions are rejected"
+manual = false
+design = "design/credentials.md"
+[requirements.ears]
+type = "event"
+trigger = "the credential file has any group or other permission bit set"
+system = "owner-only file source"
+action = "return `CredentialError::PermissionsTooOpen` with the observed mode"
+
+[[requirements]]
+id = "CLIENT-CREDS-FILE-006"
+title = "Files owned by another user are rejected"
+manual = false
+design = "design/credentials.md"
+[requirements.ears]
+type = "event"
+trigger = "the credential file is owned by a UID other than the process's effective UID"
+system = "owner-only file source"
+action = "return `CredentialError::WrongOwner`"
+
+[[requirements]]
+id = "CLIENT-CREDS-FILE-007"
+title = "Empty, oversized or malformed content is rejected"
+manual = false
+design = "design/credentials.md"
+[requirements.ears]
+type = "event"
+trigger = "the credential file is empty after removing one trailing newline, has more than 4096 bytes within the first 4097 read, or contains a byte outside visible ASCII"
+system = "owner-only file source"
+action = "return `CredentialError::Empty`, `TooLarge` or `Malformed` respectively"
+
+[[requirements]]
+id = "CLIENT-CREDS-FILE-008"
+title = "Opening a FIFO never blocks"
+manual = false
+design = "design/credentials.md"
+[requirements.ears]
+type = "event"
+trigger = "the configured credential path is a FIFO with no writer"
+system = "owner-only file source"
+action = "return `CredentialError::NotRegularFile` without blocking"

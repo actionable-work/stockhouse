@@ -1,0 +1,10 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "stockhouse"
+publish = false
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+stockhouse-cli = { workspace = true }

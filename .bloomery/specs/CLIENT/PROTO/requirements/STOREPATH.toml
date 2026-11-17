@@ -1,0 +1,56 @@
+group = "STOREPATH"
+
+[[requirements]]
+id = "CLIENT-PROTO-STOREPATH-001"
+title = "Valid store paths parse into hash and name"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a string of the form `/nix/store/<32 nix32 chars>-<valid name>` is parsed as a store path"
+system = "store path parser"
+action = "return a store path exposing the hash, the name and the unchanged full path"
+
+[[requirements]]
+id = "CLIENT-PROTO-STOREPATH-002"
+title = "Paths outside /nix/store are rejected"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a store path is parsed whose prefix is not exactly `/nix/store/`"
+system = "store path parser"
+action = "return `StorePathError::NotInStore`"
+
+[[requirements]]
+id = "CLIENT-PROTO-STOREPATH-003"
+title = "Store path hashes must be 32 nix32 characters"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a store path, basename or bare hash is parsed whose hash part is not exactly 32 characters of the Nix base-32 alphabet"
+system = "store path parser"
+action = "return `StorePathError::InvalidHash`"
+
+[[requirements]]
+id = "CLIENT-PROTO-STOREPATH-004"
+title = "Store path names follow Nix name rules"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a store path or basename is parsed whose name is empty, longer than 211 bytes, starts with `.`, or contains a character outside `[A-Za-z0-9+-._?=]`"
+system = "store path parser"
+action = "return `StorePathError::InvalidName`"
+
+[[requirements]]
+id = "CLIENT-PROTO-STOREPATH-005"
+title = "Store path basenames parse for references"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a `<hash>-<name>` basename is parsed"
+system = "store path parser"
+action = "apply the same hash and name rules as full store paths and render the full path under `/nix/store/`"

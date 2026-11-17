@@ -1,0 +1,67 @@
+group = "LISTEN"
+
+[[requirements]]
+id = "CLIENT-PROXY-LISTEN-001"
+title = "The proxy binds only its loopback address"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "the proxy starts"
+system = "proxy server"
+action = "listen only on the configured loopback socket address"
+
+[[requirements]]
+id = "CLIENT-PROXY-LISTEN-002"
+title = "An occupied port fails without fallback"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "the configured listen address is already in use when the proxy starts"
+system = "proxy server"
+action = "fail with `ServeError::AddressInUse` naming the address without binding any other port"
+
+[[requirements]]
+id = "CLIENT-PROXY-LISTEN-003"
+title = "The proxy serves its own nix-cache-info"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a client requests `GET` or `HEAD /nix-cache-info`"
+system = "proxy server"
+action = "answer 200 with `StoreDir: /nix/store`, `WantMassQuery: 1` and the configured priority, without contacting any upstream"
+
+[[requirements]]
+id = "CLIENT-PROXY-LISTEN-004"
+title = "Unknown routes are not proxied"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a client requests a path that is not `/nix-cache-info`, a narinfo route or a NAR route"
+system = "proxy server"
+action = "answer 404 without contacting any upstream"
+
+[[requirements]]
+id = "CLIENT-PROXY-LISTEN-005"
+title = "Only GET and HEAD are accepted"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a client uses a method other than `GET` or `HEAD`, or `HEAD` on a NAR route"
+system = "proxy server"
+action = "answer 405 without contacting any upstream"
+
+[[requirements]]
+id = "CLIENT-PROXY-LISTEN-006"
+title = "Invalid narinfo hashes are rejected"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a client requests `/<x>.narinfo` where `<x>` is not a valid store path hash"
+system = "proxy server"
+action = "answer 400 without contacting any upstream"

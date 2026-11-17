@@ -1,0 +1,144 @@
+group = "QUEUE"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-001"
+title = "Queue creation writes the versioned layout and limits"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the uploader creates a queue with a maximum pending count"
+system = "queue"
+action = "create `pending/`, `failed/`, `done/` and `tmp/`, write `FORMAT` as `stockhouse-queue-v1` if absent and write `LIMITS` with that maximum, keeping existing records"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-002"
+title = "Unknown or missing queue formats are rejected"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a queue is opened whose `FORMAT` or `LIMITS` is missing or unparsable, or whose `FORMAT` differs from the current format"
+system = "queue"
+action = "return `QueueError::NotInitialized` or `QueueError::UnsupportedFormat` respectively"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-003"
+title = "A new path is queued with a fresh identity"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a store path that is neither pending, failed nor uploaded is enqueued below capacity"
+system = "queue"
+action = "durably write one pending record with a new `UploadId`, zero attempts and `next_attempt_at` equal to now, and return `Queued` with that identity"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-004"
+title = "A pending path keeps its identity"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a store path that already has a pending record is enqueued again"
+system = "queue"
+action = "leave the record unchanged and return `AlreadyQueued` with the existing identity"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-005"
+title = "An uploaded path is not queued again"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a store path with a done record is enqueued"
+system = "queue"
+action = "write no record and return `AlreadyUploaded`"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-013"
+title = "A failed path stays failed"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a store path with a failed record is enqueued"
+system = "queue"
+action = "write no pending record and return `AlreadyFailed` with the failed record's identity"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-006"
+title = "Concurrent enqueues create one record"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "several producers enqueue the same store path concurrently"
+system = "queue"
+action = "create exactly one pending record, and every producer reports the identity of that record"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-007"
+title = "A full queue overflows visibly"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a producer enqueues a store path while `pending/` holds `max_pending` records"
+system = "queue"
+action = "write no pending record, append one byte to the `overflow` marker and return `Overflow`"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-008"
+title = "The overflow marker is bounded"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the overflow marker has reached 1 MiB"
+system = "queue"
+action = "append nothing further while still reporting overflow as active and truncated"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-009"
+title = "Status reports counts and overflow"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "queue status is requested"
+system = "queue"
+action = "report pending, failed and uploaded counts, the earliest `next_attempt_at`, and overflow as active, dropped count and truncated across both overflow markers"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-010"
+title = "Only due records are attempted, in order"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "an uploader pass selects work"
+system = "queue"
+action = "return at most `batch_size` pending records with `next_attempt_at` not after now, ordered by `next_attempt_at` and then identity"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-011"
+title = "Corrupt records are quarantined"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a pending record cannot be parsed or has a version other than 1"
+system = "queue"
+action = "move it to `failed/` with reason `corrupt` and continue with the remaining records"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-012"
+title = "Interrupted completions are reconciled"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a pending record exists for a path that also has a done record"
+system = "queue"
+action = "remove the pending record without uploading it again"

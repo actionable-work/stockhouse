@@ -1,0 +1,25 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "stockhouse-proxy"
+publish = false
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+bytes = { workspace = true }
+futures-util = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+stockhouse-credentials = { workspace = true }
+stockhouse-proto = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+
+[dev-dependencies]
+ed25519-dalek = { workspace = true }
+sha2 = { workspace = true }

@@ -1,0 +1,34 @@
+group = "VERSION"
+
+[[requirements]]
+id = "CLIENT-PROTO-VERSION-001"
+title = "Client formats reject unknown versions"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "the proxy configuration, uploader configuration or queue record reader is given a version other than 1"
+system = "client format reader"
+action = "reject the input with `UnsupportedVersion` carrying the found and supported versions"
+
+[[requirements]]
+id = "CLIENT-PROTO-VERSION-002"
+title = "Upload identities are canonical UUIDv7 values"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "an upload identity is parsed"
+system = "`UploadId` parser"
+action = "accept only a lowercase hyphenated UUID of version 7, return `UploadIdError::Invalid` for any other text, and render accepted values unchanged"
+
+[[requirements]]
+id = "CLIENT-PROTO-VERSION-003"
+title = "New upload identities are UUIDv7"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a new upload identity is generated"
+system = "`UploadId` generator"
+action = "return a distinct version 7 UUID that the `UploadId` parser accepts"

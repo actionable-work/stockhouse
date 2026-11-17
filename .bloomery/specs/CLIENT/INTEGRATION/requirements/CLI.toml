@@ -1,0 +1,67 @@
+group = "CLI"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-CLI-001"
+title = "Commands dispatch to their owners"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`stockhouse_cli::main` receives `proxy`, `uploader`, `post-build-hook`, `status`, `login`, `logout`, `refresh` or `--version`"
+system = "CLI entry point"
+action = "run that command's owning library behavior and return its documented exit status"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-CLI-002"
+title = "Usage errors exit 2"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`stockhouse_cli::main` receives no command, an unknown command, an unknown flag or a flag without its value"
+system = "CLI entry point"
+action = "print usage to stderr and return exit status 2"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-CLI-003"
+title = "No argument accepts a credential"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a credential-like flag such as `--token` is passed"
+system = "CLI entry point"
+action = "reject it as an unknown flag with exit status 2"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-CLI-004"
+title = "Deferred login commands fail clearly"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`login`, `logout` or `refresh` is run"
+system = "CLI entry point"
+action = "print that the command requires P2.06 and return exit status 1"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-CLI-005"
+title = "Status prints one JSON object"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`status --queue <dir>` is run on an initialized queue"
+system = "CLI entry point"
+action = "print the queue status as one JSON object and return exit status 0"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-CLI-006"
+title = "Configuration errors exit 2"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`proxy` or `uploader` is run with a configuration that fails to load"
+system = "CLI entry point"
+action = "print the configuration error to stderr and return exit status 2"

@@ -1,0 +1,45 @@
+group = "CONFIG"
+
+[[requirements]]
+id = "CLIENT-INGEST-CONFIG-001"
+title = "A valid uploader configuration loads"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "an uploader configuration with version 1 and valid limits, backend and scanner is parsed"
+system = "uploader configuration parser"
+action = "return every limit, the backend and the scanner as configured"
+
+[[requirements]]
+id = "CLIENT-INGEST-CONFIG-002"
+title = "Uploader configuration rejects bad versions and fields"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "an uploader configuration has a version other than 1 or an unknown field"
+system = "uploader configuration parser"
+action = "return `UploaderConfigError::UnsupportedVersion` or `UploaderConfigError::Parse` respectively"
+
+[[requirements]]
+id = "CLIENT-INGEST-CONFIG-003"
+title = "Uploader limits must be usable"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "an uploader configuration has a relative queue directory, a zero limit, or a backoff base greater than its maximum"
+system = "uploader configuration parser"
+action = "return `UploaderConfigError::RelativeQueueDir` or `UploaderConfigError::InvalidLimit` naming the field"
+
+[[requirements]]
+id = "CLIENT-INGEST-CONFIG-004"
+title = "nix-copy requires a local file destination"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the `nix-copy` backend is configured without an absolute `file://` destination"
+system = "uploader configuration parser"
+action = "return `UploaderConfigError::UnsupportedDestination`"

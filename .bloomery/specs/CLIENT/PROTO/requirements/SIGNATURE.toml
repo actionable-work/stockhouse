@@ -1,0 +1,100 @@
+group = "SIGNATURE"
+
+[[requirements]]
+id = "CLIENT-PROTO-SIGNATURE-001"
+title = "Well-formed keys and signatures parse"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a `<name>:<padded base64>` string with a non-empty whitespace-free name and 32 key bytes or 64 signature bytes is parsed"
+system = "key and signature parsers"
+action = "return the key or signature with its name and bytes"
+
+[[requirements]]
+id = "CLIENT-PROTO-SIGNATURE-008"
+title = "Keys and signatures need a name separator and valid name"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a key or signature string has no `:` or a name that is empty or contains whitespace"
+system = "key and signature parsers"
+action = "return `KeyError::Malformed` or `KeyError::InvalidName` respectively"
+
+[[requirements]]
+id = "CLIENT-PROTO-SIGNATURE-009"
+title = "Key and signature payloads must be valid base64 of the right length"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a key or signature payload is not padded base64, decodes to the wrong byte count, or a key's bytes are not a valid Ed25519 point"
+system = "key and signature parsers"
+action = "return `KeyError::InvalidBase64`, `KeyError::InvalidLength` or `KeyError::InvalidKey` respectively"
+
+[[requirements]]
+id = "CLIENT-PROTO-SIGNATURE-002"
+title = "Fingerprints follow the Nix format with sorted references"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "the signature fingerprint of a narinfo is computed"
+system = "fingerprint function"
+action = "return `1;<StorePath>;<canonical NarHash>;<NarSize>;<full reference paths sorted bytewise and joined by ,>` regardless of narinfo reference order"
+
+[[requirements]]
+id = "CLIENT-PROTO-SIGNATURE-003"
+title = "A valid trusted signature verifies"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a narinfo carries a signature from a trusted key name that verifies over its fingerprint and no failing trusted-name signature"
+system = "trusted key verification"
+action = "succeed and report the name of the verifying key"
+
+[[requirements]]
+id = "CLIENT-PROTO-SIGNATURE-004"
+title = "A failing trusted signature is a hard error"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "any signature naming a trusted key fails strict Ed25519 verification over the narinfo fingerprint"
+system = "trusted key verification"
+action = "return `SignatureError::InvalidSignature` naming that key even when another signature verifies"
+
+[[requirements]]
+id = "CLIENT-PROTO-SIGNATURE-005"
+title = "Unsigned narinfo is rejected"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a narinfo without any `Sig` field is verified"
+system = "trusted key verification"
+action = "return `SignatureError::Unsigned`"
+
+[[requirements]]
+id = "CLIENT-PROTO-SIGNATURE-006"
+title = "Signatures only from untrusted keys are rejected"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a narinfo whose signatures all name untrusted keys is verified"
+system = "trusted key verification"
+action = "return `SignatureError::UntrustedSigner`"
+
+[[requirements]]
+id = "CLIENT-PROTO-SIGNATURE-007"
+title = "Duplicate trusted key names are rejected"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a trusted key set is built from two keys with the same name"
+system = "trusted key set constructor"
+action = "return `KeyError::DuplicateName`"

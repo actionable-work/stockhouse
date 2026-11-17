@@ -1,0 +1,188 @@
+group = "LOOKUP"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-001"
+title = "Tiers are consulted in fixed order"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a narinfo is requested"
+system = "proxy lookup"
+action = "consult the configured tiers in the order private, shared, public, skipping unconfigured tiers"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-002"
+title = "The first verified hit is served"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a tier returns a valid, correctly signed narinfo for the requested hash"
+system = "proxy lookup"
+action = "answer 200 with that narinfo and send no request to any later tier"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-003"
+title = "A genuine miss falls through"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a tier answers `NotFound` for the requested narinfo"
+system = "proxy lookup"
+action = "continue with the next configured tier"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-004"
+title = "A miss on every tier is a 404"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "every configured tier answers `NotFound` for the requested narinfo"
+system = "proxy lookup"
+action = "answer 404"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-005"
+title = "Authorization failures do not fall through"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a tier denies a narinfo or nix-cache-info request with 401, 403 or a file permission error"
+system = "proxy lookup"
+action = "answer 503 for `ProxyError::Denied` naming the tier and send no request to any later tier"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-006"
+title = "Upstream outages do not fall through"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a tier fails a narinfo or nix-cache-info request with a status other than 200, 401, 403 or 404, a redirect, a transport error or an oversized body"
+system = "proxy lookup"
+action = "answer 503 for `ProxyError::Unavailable` naming the tier and send no request to any later tier"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-007"
+title = "Malformed narinfo does not fall through"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a tier returns narinfo that fails strict parsing"
+system = "proxy lookup"
+action = "answer 502 for `ProxyError::NarInfo` naming the tier and send no request to any later tier"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-008"
+title = "Mismatched store paths do not fall through"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a tier returns narinfo whose store path hash differs from the requested hash"
+system = "proxy lookup"
+action = "answer 502 for `ProxyError::StorePathMismatch` naming the tier and send no request to any later tier"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-009"
+title = "Signature failures do not fall through"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a tier returns narinfo that is unsigned, signed only by untrusted keys, or has a failing trusted signature"
+system = "proxy lookup"
+action = "answer 502 for `ProxyError::Signature` naming the tier and send no request to any later tier"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-010"
+title = "Compressed narinfo without FileHash is still served"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a tier returns a valid, correctly signed, compressed narinfo without `FileHash`"
+system = "proxy lookup"
+action = "serve it as a hit, leaving NAR authenticity to Nix's check of the signed `NarHash`"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-011"
+title = "Credential failures do not fall through"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "resolving a tier's credential fails"
+system = "proxy lookup"
+action = "answer 503 for `ProxyError::Credential` naming the tier, send no request to that tier and send no request to any later tier"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-012"
+title = "Upstream nix-cache-info is validated before lookup"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a tier is first consulted in a process"
+system = "proxy lookup"
+action = "fetch and strictly parse its nix-cache-info, answering 502 for `ProxyError::CacheInfoMissing` or `ProxyError::CacheInfo` without falling through when it is absent or invalid"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-013"
+title = "Validated nix-cache-info is remembered"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a tier's nix-cache-info has validated successfully"
+system = "proxy lookup"
+action = "not fetch that tier's nix-cache-info again for the life of the process"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-014"
+title = "Served narinfo routes NAR fetches to the winning tier"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a narinfo hit is served"
+system = "proxy lookup"
+action = "replace only its `URL` with `nar/<tier>/<hash>/<original URL>` and leave every signed field and signature unchanged"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-015"
+title = "Higher tiers win store-path collisions"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "the same store path hash exists in several tiers with different narinfo"
+system = "proxy lookup"
+action = "serve the narinfo of the highest-priority tier with a verified hit, naming that tier in the served `URL`"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-016"
+title = "HEAD narinfo follows GET semantics"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a client requests `HEAD /<hash>.narinfo`"
+system = "proxy lookup"
+action = "perform the same lookup and answer the same status as `GET` without a body"
+
+[[requirements]]
+id = "CLIENT-PROXY-LOOKUP-017"
+title = "Slow upstreams time out as unavailable"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "an upstream does not complete connection or deliver response data within `request_timeout_secs`"
+system = "proxy lookup"
+action = "answer 503 for `ProxyError::Unavailable` naming the tier without falling through"

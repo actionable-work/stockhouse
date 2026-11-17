@@ -1,0 +1,100 @@
+group = "NAR"
+
+[[requirements]]
+id = "CLIENT-PROXY-NAR-001"
+title = "NAR routes re-verify against the named tier"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a client requests `GET /nar/<tier>/<hash>/<url>` for a configured tier"
+system = "proxy NAR route"
+action = "re-run credential, nix-cache-info, narinfo, store path and signature checks against that tier only before fetching any NAR bytes"
+
+[[requirements]]
+id = "CLIENT-PROXY-NAR-002"
+title = "NAR URLs must match the verified narinfo"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "the requested `<url>` differs from the verified narinfo `URL`"
+system = "proxy NAR route"
+action = "answer 502 for `ProxyError::NarInfoChanged` without fetching the NAR"
+
+[[requirements]]
+id = "CLIENT-PROXY-NAR-003"
+title = "Unconfigured or invalid NAR routes are 404"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a NAR route names an unconfigured tier or an invalid hash"
+system = "proxy NAR route"
+action = "answer 404 without fetching any NAR bytes"
+
+[[requirements]]
+id = "CLIENT-PROXY-NAR-004"
+title = "Verified NAR bytes stream completely"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "the narinfo gives a served integrity check and the fetched representation matches its size and SHA-256"
+system = "proxy NAR route"
+action = "answer 200 with `Content-Length` equal to the expected size and deliver every byte"
+
+[[requirements]]
+id = "CLIENT-PROXY-NAR-005"
+title = "Altered NAR bytes are never delivered complete"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "the fetched NAR representation is shorter, longer or hashes differently than expected"
+system = "proxy NAR route"
+action = "close the connection after fewer than `Content-Length` bytes so the client never receives a complete transfer"
+
+[[requirements]]
+id = "CLIENT-PROXY-NAR-006"
+title = "A NAR missing upstream is an error"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "the named tier answers `NotFound` for the narinfo or for the NAR it references"
+system = "proxy NAR route"
+action = "answer 502 for `ProxyError::NarMissing` naming the tier"
+
+[[requirements]]
+id = "CLIENT-PROXY-NAR-007"
+title = "NAR route errors map like lookup errors"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a NAR route's credential, nix-cache-info, narinfo, signature or NAR fetch fails with anything other than a miss"
+system = "proxy NAR route"
+action = "answer the lookup table's status for the same `ProxyError` variant (503 for `Credential`, `Denied` and `Unavailable`, 502 otherwise)"
+
+[[requirements]]
+id = "CLIENT-PROXY-NAR-008"
+title = "Range requests receive the full representation"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a NAR request carries a `Range` header"
+system = "proxy NAR route"
+action = "ignore it and answer 200 with the complete representation and no `Accept-Ranges` header"
+
+[[requirements]]
+id = "CLIENT-PROXY-NAR-009"
+title = "Unchecked representations pass through unchanged"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a NAR is requested whose verified narinfo is compressed without `FileHash`"
+system = "proxy NAR route"
+action = "stream the upstream body unchanged with 200, resetting the connection if the upstream fails or ends early"

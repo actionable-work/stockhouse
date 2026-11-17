@@ -1,0 +1,133 @@
+group = "NARINFO"
+
+[[requirements]]
+id = "CLIENT-PROTO-NARINFO-001"
+title = "Valid narinfo parses into typed fields"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a narinfo containing valid `StorePath`, `URL`, `NarHash` and `NarSize` and any valid optional fields is parsed"
+system = "narinfo parser"
+action = "return a narinfo exposing every field with its typed value, every `Sig` line in order and `References` as store path basenames"
+
+[[requirements]]
+id = "CLIENT-PROTO-NARINFO-002"
+title = "Missing compression defaults to bzip2"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a narinfo without a `Compression` field is parsed"
+system = "narinfo parser"
+action = "report the compression as `bzip2`, matching Nix"
+
+[[requirements]]
+id = "CLIENT-PROTO-NARINFO-003"
+title = "Required narinfo fields must be present"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a narinfo lacking `StorePath`, `URL`, `NarHash` or `NarSize` is parsed"
+system = "narinfo parser"
+action = "return `NarInfoError::MissingField` naming the first missing field in that order"
+
+[[requirements]]
+id = "CLIENT-PROTO-NARINFO-004"
+title = "Unknown narinfo fields are rejected"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a narinfo containing a key outside the accepted field set is parsed"
+system = "narinfo parser"
+action = "return `NarInfoError::UnknownField` naming that key"
+
+[[requirements]]
+id = "CLIENT-PROTO-NARINFO-005"
+title = "Single-valued narinfo fields cannot repeat"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a narinfo repeats any accepted key other than `Sig`"
+system = "narinfo parser"
+action = "return `NarInfoError::DuplicateField` naming that key"
+
+[[requirements]]
+id = "CLIENT-PROTO-NARINFO-006"
+title = "Malformed narinfo lines are rejected"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a narinfo contains a non-empty line without a `: ` separator or with an empty key"
+system = "narinfo parser"
+action = "return `NarInfoError::MalformedLine` with the one-based line number"
+
+[[requirements]]
+id = "CLIENT-PROTO-NARINFO-007"
+title = "Invalid narinfo values are rejected"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a narinfo field value violates its rule, including an invalid store path, hash, size, zero `NarSize`, invalid or duplicate reference, deriver, signature or compression"
+system = "narinfo parser"
+action = "return `NarInfoError::InvalidField` naming that field"
+
+[[requirements]]
+id = "CLIENT-PROTO-NARINFO-008"
+title = "Unsafe narinfo URLs are rejected"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a narinfo `URL` is absolute, has a scheme, has an empty, `.` or `..` segment, or contains a character outside the accepted set"
+system = "narinfo parser"
+action = "return `NarInfoError::InvalidField` naming `URL`"
+
+[[requirements]]
+id = "CLIENT-PROTO-NARINFO-009"
+title = "FileHash and FileSize appear together"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a narinfo contains exactly one of `FileHash` and `FileSize`"
+system = "narinfo parser"
+action = "return `NarInfoError::InvalidField` naming the field that is present"
+
+[[requirements]]
+id = "CLIENT-PROTO-NARINFO-010"
+title = "Oversized or non-UTF-8 narinfo is rejected"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "narinfo input is larger than 1 MiB or is not valid UTF-8"
+system = "narinfo parser"
+action = "return `NarInfoError::TooLarge` or `NarInfoError::NotUtf8` respectively without parsing fields"
+
+[[requirements]]
+id = "CLIENT-PROTO-NARINFO-011"
+title = "Rendered narinfo round-trips"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a parsed narinfo is rendered"
+system = "narinfo renderer"
+action = "emit canonical text in field-table order that parses back to an equal narinfo"
+
+[[requirements]]
+id = "CLIENT-PROTO-NARINFO-012"
+title = "URL replacement preserves every other field"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a narinfo's URL is replaced"
+system = "narinfo URL replacement"
+action = "change only `URL` so that the signature fingerprint and all other rendered fields are unchanged"

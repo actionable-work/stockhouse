@@ -1,0 +1,89 @@
+group = "RETRY"
+
+[[requirements]]
+id = "CLIENT-INGEST-RETRY-001"
+title = "Uploaded records move to the ledger"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the uploader reports `Uploaded` for a job"
+system = "uploader pass"
+action = "write a done record carrying the job's identity and then remove its pending record"
+
+[[requirements]]
+id = "CLIENT-INGEST-RETRY-002"
+title = "Transient and uncertain failures back off exponentially"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the uploader reports `Retry` with `Transient` or `Uncertain`"
+system = "uploader pass"
+action = "increment attempts, set `next_attempt_at` to now plus `min(base * 2^(attempts-1), max)`, record the message and keep the identity"
+
+[[requirements]]
+id = "CLIENT-INGEST-RETRY-003"
+title = "Quota exhaustion waits the maximum backoff"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the uploader reports `Retry` with `QuotaExceeded`"
+system = "uploader pass"
+action = "increment attempts, set `next_attempt_at` to now plus the maximum backoff and keep the identity"
+
+[[requirements]]
+id = "CLIENT-INGEST-RETRY-004"
+title = "Deferred uploads stay pending without consuming attempts"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the uploader reports `Deferred`"
+system = "uploader pass"
+action = "leave attempts unchanged, set `next_attempt_at` to now plus the maximum backoff and keep the record pending"
+
+[[requirements]]
+id = "CLIENT-INGEST-RETRY-005"
+title = "Exhausted retries are kept visible"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a `Retry` outcome brings attempts to `max_attempts`"
+system = "uploader pass"
+action = "move the record to `failed/` with its identity and last error"
+
+[[requirements]]
+id = "CLIENT-INGEST-RETRY-006"
+title = "Rejected uploads fail visibly"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the uploader reports `Rejected`"
+system = "uploader pass"
+action = "move the record to `failed/` with the rejection message as its reason"
+
+[[requirements]]
+id = "CLIENT-INGEST-RETRY-007"
+title = "Upload identity survives restarts"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a queue is reopened by a new process after a retry outcome"
+system = "uploader pass"
+action = "present the same identity to the uploader on every later attempt of that path"
+
+[[requirements]]
+id = "CLIENT-INGEST-RETRY-008"
+title = "A stopped or failing uploader never fails a build"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a derivation is built while the uploader is stopped or its backend fails every job"
+system = "installed client"
+action = "let the build succeed with the post-build hook exiting 0 and the output recorded as pending"
