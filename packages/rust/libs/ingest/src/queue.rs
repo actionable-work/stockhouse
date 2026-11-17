@@ -211,10 +211,15 @@ impl Producer<'_> {
             }
             return Ok(EnqueueOutcome::Overflow);
         }
-        self.place(path, now)
+        self.place(path, now, record_overflow)
     }
 
-    fn place(&mut self, path: &StorePath, now: u64) -> Result<EnqueueOutcome, QueueError> {
+    fn place(
+        &mut self,
+        path: &StorePath,
+        now: u64,
+        record_overflow: bool,
+    ) -> Result<EnqueueOutcome, QueueError> {
         let q = self.queue;
         let record = Record::new(path.clone(), now);
         let target = q.path("pending", path.hash().as_str(), ".json");
@@ -228,7 +233,8 @@ impl Producer<'_> {
             Some(Ok(existing)) => Ok(EnqueueOutcome::AlreadyQueued(existing.id)),
             // An unreadable record holds the name until it is quarantined;
             // the marker makes a later rescan enqueue the path again.
-            _ => self.overflow().map(|()| EnqueueOutcome::Overflow),
+            _ if record_overflow => self.overflow().map(|()| EnqueueOutcome::Overflow),
+            _ => Ok(EnqueueOutcome::Overflow),
         }
     }
 

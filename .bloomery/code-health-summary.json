@@ -43,14 +43,14 @@
     {
       "manifest_path": "packages/rust/libs/ingest/Cargo.toml",
       "name": "stockhouse-ingest",
-      "overall_score": 99.69,
-      "sloc": 1239,
+      "overall_score": 99.68,
+      "sloc": 1246,
       "subscores": {
         "complexity": 0.29,
         "crateSize": 0.0,
         "duplication": 0.0,
         "nesting": 0.0,
-        "size": 0.02
+        "size": 0.03
       }
     },
     {
@@ -80,7 +80,7 @@
       }
     }
   ],
-  "input_digest": "cf10c0e90272e11ee9ddfb19c7c12fea7819b16a27b42c086dd3f00c9a89ffaf",
+  "input_digest": "4de6a48c6e5613d479f4a7a6595d25b739aa2bdea8560a25a6a41cb19842cc00",
   "policy": {
     "scoring": {
       "crateSlocLimit": 1500,
@@ -105,8 +105,8 @@
   "schema_version": 4,
   "workspace": {
     "crate_count": 6,
-    "overall_score": 99.84,
-    "sloc": 4029,
+    "overall_score": 99.83,
+    "sloc": 4036,
     "subscores": {
       "complexity": 0.16,
       "crateSize": 0.0,

@@ -161,6 +161,6 @@ manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
-trigger = "a path is enqueued while its pending record is unreadable"
+trigger = "a path is enqueued with overflow recording while its pending record is unreadable"
 system = "queue"
 action = "return `Overflow`, leave the unreadable record untouched for quarantine and record the drop in the overflow marker so a later rescan enqueues the path"
