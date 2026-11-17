@@ -62,7 +62,7 @@ removes its own file. Leftover staging files are never read.
 5. otherwise `Queued(id)` with a new `UploadId`, `attempts = 0` and
    `next_attempt_at = now`.
 
-If `pending/<hash>.json` exists but cannot be read, the name stays taken
+If `pending/<hash>.json` exists but cannot be read (QUEUE-015, QUEUE-016), the name stays taken
 until the uploader quarantines the record. The enqueue then returns
 `Overflow` and, when the producer records overflow (the hook does; rescan
 keeps its own markers), appends to `overflow`, so a later rescan enqueues the
@@ -92,8 +92,8 @@ that loop while it runs. `stockhouse post-build-hook --queue <dir>`:
 3. Enqueues up to 1024 paths per invocation, counting `pending/` once, and
    records the rest as overflow. Entries that are not valid store paths are
    skipped with a stderr line. The first queue I/O error (an unwritable
-   queue shows up here) is logged once and stops the loop, after a best-effort
-   overflow record so a rescan recovers the remaining paths.
+   queue shows up here) is logged once and stops the loop without creating
+   anything; the periodic rescan recovers the remaining paths.
 4. Never contacts the uploader, the network or a server, and never waits for
    an upload.
 5. Exits 0 in every case. The CLI catches panics (`catch_unwind`; release

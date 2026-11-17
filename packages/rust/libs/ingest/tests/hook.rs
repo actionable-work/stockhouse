@@ -75,6 +75,7 @@ fn unusable_queues_never_fail_the_build() {
         assert_eq!(log.len(), 1, "{dir:?}: {log:?}");
     }
     assert!(!base.join("missing").exists());
+    assert!(!unwritable.root().join("overflow").exists());
     assert_eq!(std::fs::read_dir(base.join("bare")).unwrap().count(), 0);
     assert_eq!(
         std::fs::read_dir(unwritable.root().join("pending"))

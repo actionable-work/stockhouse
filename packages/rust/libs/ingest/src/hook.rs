@@ -100,8 +100,6 @@ pub fn run(dir: &Path, out_paths: &str, now: u64, log: &mut dyn Write) -> HookRe
             Err(e) => {
                 // The queue is unusable; one line, not one per path.
                 let _ = writeln!(log, "stockhouse post-build-hook: {e}");
-                // Best effort: the marker lets a rescan recover the rest.
-                let _ = producer.overflow();
                 break;
             }
         }

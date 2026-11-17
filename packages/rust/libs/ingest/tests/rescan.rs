@@ -262,3 +262,28 @@ fn nix_scanner_passes_fixed_arguments() {
         ]
     );
 }
+
+#[cfg_attr(any(), bloomery("CLIENT-INGEST-QUEUE-016"))]
+#[test]
+fn a_corrupt_record_stops_a_rescan_without_new_overflow() {
+    let q = queue(1);
+    fill(&q, &["a", "b"]);
+    let pending = q.root().join("pending");
+    std::fs::remove_file(pending.join(format!("{}.json", path("a").hash()))).unwrap();
+    std::fs::write(
+        pending.join(format!("{}.json", path("c").hash())),
+        b"{not json",
+    )
+    .unwrap();
+    let report = rescan(&q, &FakeScanner(Ok(paths(&["c"]))), 5).unwrap();
+    assert_eq!((report.enqueued, report.complete), (0, false));
+    assert!(
+        !q.root().join("overflow").exists(),
+        "no live marker is written"
+    );
+    assert_eq!(
+        std::fs::read(q.root().join("overflow.rescan")).unwrap(),
+        b"o"
+    );
+    assert!(q.status().unwrap().overflow.active);
+}

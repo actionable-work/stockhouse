@@ -164,3 +164,14 @@ type = "event"
 trigger = "a path is enqueued with overflow recording while its pending record is unreadable"
 system = "queue"
 action = "return `Overflow`, leave the unreadable record untouched for quarantine and record the drop in the overflow marker so a later rescan enqueues the path"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-016"
+title = "A rescan blocked by a corrupt record keeps its held overflow"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a rescan enqueues a path whose pending record is unreadable"
+system = "queue"
+action = "return `Overflow` without appending to the live overflow marker, so the rescan stops incomplete and keeps the marker it holds"
