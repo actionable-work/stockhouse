@@ -238,3 +238,23 @@ async fn unchecked_representations_that_end_early_never_complete() {
     assert_eq!(status, 200);
     assert_eq!(body, Err(()), "a cut-short passthrough must not complete");
 }
+
+#[cfg_attr(any(), bloomery("CLIENT-PROXY-NAR-009"))]
+#[tokio::test]
+async fn unchecked_representations_that_fail_midway_are_reset_by_the_proxy() {
+    // Chunked upstream with no length: only the proxy's own reset can make
+    // the client see an incomplete transfer.
+    let s = setup().await;
+    let entry = Entry::compressed("broken", b"opaque xz bytes", false);
+    s.private.add(&entry);
+    s.private.set(
+        &entry.nar_url,
+        Reply {
+            fail_midway: true,
+            ..Reply::ok(entry.nar.clone())
+        },
+    );
+    let (status, length, body) = fetch(&s.proxy, &route(&entry)).await;
+    assert_eq!((status, length), (200, None));
+    assert_eq!(body, Err(()), "a failed passthrough must not complete");
+}

@@ -93,7 +93,3 @@ Other deferrals:
   `--json-format` is deprecated. The scanner already accepts the
   `--json-format 2` shape. Switch to it when the oldest pinned Nix supports
   the flag.
-- **Pin the proxy's own passthrough reset**: the NAR-009 early-end test uses
-  an upstream with a declared `Content-Length`, so the client would also see
-  the truncation through that header alone. Add a chunked upstream that fails
-  mid-body, so the test depends on the proxy resetting the connection itself.

@@ -13,8 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::net::TcpListener;
 
-type FixtureFrames =
-    futures_util::stream::BoxStream<'static, Result<Frame<Bytes>, std::convert::Infallible>>;
+type FixtureFrames = futures_util::stream::BoxStream<'static, Result<Frame<Bytes>, std::io::Error>>;
 pub type FixtureBody = Either<Full<Bytes>, StreamBody<FixtureFrames>>;
 
 #[derive(Clone)]
@@ -25,6 +24,8 @@ pub struct Reply {
     pub location: Option<String>,
     /// A declared `Content-Length` that may differ from the body sent.
     pub content_length: Option<u64>,
+    /// Send the body chunked, then fail the stream instead of ending it.
+    pub fail_midway: bool,
 }
 
 impl Reply {
@@ -35,6 +36,7 @@ impl Reply {
             delay: Duration::ZERO,
             location: None,
             content_length: None,
+            fail_midway: false,
         }
     }
 
@@ -45,6 +47,7 @@ impl Reply {
             delay: Duration::ZERO,
             location: None,
             content_length: None,
+            fail_midway: false,
         }
     }
 }
@@ -160,14 +163,19 @@ impl Fixture {
             .cloned()
             .unwrap_or(Reply::status(404));
         tokio::time::sleep(reply.delay).await;
-        // A declared length uses a body of unknown size, so hyper sends the
-        // header as given and ends the connection when the body runs out.
-        let body = if reply.content_length.is_some() {
-            // Pausing after the data lets hyper flush it before the short end.
+        // A declared length or a mid-body failure uses a body of unknown size:
+        // hyper sends a declared header as given and ends the connection when
+        // the body runs out, and aborts a chunked body when the stream fails.
+        let body = if reply.content_length.is_some() || reply.fail_midway {
+            // Pausing after the data lets hyper flush it before the end.
             let data = futures_util::stream::iter([Ok(Frame::data(Bytes::from(reply.body)))]);
             let pause = futures_util::stream::once(tokio::time::sleep(Duration::from_millis(50)))
                 .filter_map(|()| async { None });
-            Either::Right(StreamBody::new(data.chain(pause).boxed()))
+            let fail = reply
+                .fail_midway
+                .then(|| Err(std::io::Error::other("fixture failure")));
+            let tail = futures_util::stream::iter(fail);
+            Either::Right(StreamBody::new(data.chain(pause).chain(tail).boxed()))
         } else {
             Either::Left(Full::new(Bytes::from(reply.body)))
         };
