@@ -266,10 +266,14 @@ fn nix_scanner_passes_fixed_arguments() {
 #[cfg_attr(any(), bloomery("CLIENT-INGEST-QUEUE-016"))]
 #[test]
 fn a_corrupt_record_stops_a_rescan_without_new_overflow() {
-    let q = queue(1);
-    fill(&q, &["a", "b"]);
+    // Free capacity, so the enqueue reaches the corrupt record rather than
+    // stopping at the capacity check.
+    let q = queue(2);
+    fill(&q, &["a", "b", "x"]);
     let pending = q.root().join("pending");
-    std::fs::remove_file(pending.join(format!("{}.json", path("a").hash()))).unwrap();
+    for label in ["a", "b"] {
+        std::fs::remove_file(pending.join(format!("{}.json", path(label).hash()))).unwrap();
+    }
     std::fs::write(
         pending.join(format!("{}.json", path("c").hash())),
         b"{not json",
