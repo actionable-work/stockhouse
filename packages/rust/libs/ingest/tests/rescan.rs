@@ -1,6 +1,9 @@
 mod common;
 use common::*;
-use stockhouse_ingest::{NixPathInfoScanner, NoScanner, Queue, RescanError, ScanError, Scanner, Worker, parse_path_info, rescan};
+use stockhouse_ingest::{
+    NixPathInfoScanner, NoScanner, Queue, RescanError, ScanError, Scanner, Worker, parse_path_info,
+    rescan,
+};
 
 fn fill(q: &Queue, labels: &[&str]) {
     let mut producer = q.producer().unwrap();
@@ -23,7 +26,10 @@ fn overflow_triggers_a_rescan_when_capacity_is_free() {
     let mut worker = Worker::new(q.clone(), &uploader, &scanner, limits());
     worker.pass(10, &mut Vec::new()).unwrap();
     let report = worker.pass(11, &mut Vec::new()).unwrap();
-    assert!(report.rescanned, "overflow with free capacity rescans before the interval");
+    assert!(
+        report.rescanned,
+        "overflow with free capacity rescans before the interval"
+    );
     assert!(!q.status().unwrap().overflow.active);
     assert!(q.done_record(&path("c")).is_some());
 }
@@ -34,8 +40,16 @@ fn full_queue_skips_overflow_rescans() {
     let q = queue(1);
     fill(&q, &["a", "b"]);
     let scanner = FakeScanner(Ok(paths(&["b"])));
-    let mut worker = Worker::new(q.clone(), &stockhouse_ingest::DeferredUploader, &scanner, limits());
-    assert!(worker.pass(10, &mut Vec::new()).unwrap().rescanned, "first pass is the interval rescan");
+    let mut worker = Worker::new(
+        q.clone(),
+        &stockhouse_ingest::DeferredUploader,
+        &scanner,
+        limits(),
+    );
+    assert!(
+        worker.pass(10, &mut Vec::new()).unwrap().rescanned,
+        "first pass is the interval rescan"
+    );
     let mut log = Vec::new();
     let report = worker.pass(11, &mut log).unwrap();
     assert!(!report.rescanned);
@@ -59,7 +73,12 @@ fn rescan_enqueues_missed_paths() {
 fn complete_rescan_clears_overflow() {
     let q = queue(1);
     fill(&q, &["a", "b"]);
-    std::fs::remove_file(q.root().join("pending").join(format!("{}.json", path("a").hash()))).unwrap();
+    std::fs::remove_file(
+        q.root()
+            .join("pending")
+            .join(format!("{}.json", path("a").hash())),
+    )
+    .unwrap();
     let report = rescan(&q, &FakeScanner(Ok(paths(&["b"]))), 5).unwrap();
     assert!(report.complete);
     assert!(!q.status().unwrap().overflow.active);
@@ -70,7 +89,12 @@ fn complete_rescan_clears_overflow() {
 fn rescan_at_capacity_keeps_overflow() {
     let q = queue(2);
     fill(&q, &["a", "b", "c"]);
-    std::fs::remove_file(q.root().join("pending").join(format!("{}.json", path("a").hash()))).unwrap();
+    std::fs::remove_file(
+        q.root()
+            .join("pending")
+            .join(format!("{}.json", path("a").hash())),
+    )
+    .unwrap();
     let report = rescan(&q, &FakeScanner(Ok(paths(&["c", "d", "e"]))), 5).unwrap();
     assert_eq!((report.enqueued, report.complete), (1, false));
     assert!(q.status().unwrap().overflow.active);
@@ -78,7 +102,10 @@ fn rescan_at_capacity_keeps_overflow() {
     fill(&fresh, &["x"]);
     assert!(!fresh.status().unwrap().overflow.active);
     rescan(&fresh, &FakeScanner(Ok(paths(&["y"]))), 5).unwrap();
-    assert!(fresh.status().unwrap().overflow.active, "an interval rescan at capacity creates the marker");
+    assert!(
+        fresh.status().unwrap().overflow.active,
+        "an interval rescan at capacity creates the marker"
+    );
 }
 
 struct OverflowingScanner(Queue);
@@ -116,7 +143,12 @@ fn failed_scan_keeps_overflow() {
 fn none_scanner_never_clears_overflow() {
     let q = queue(1);
     fill(&q, &["a", "b"]);
-    std::fs::remove_file(q.root().join("pending").join(format!("{}.json", path("a").hash()))).unwrap();
+    std::fs::remove_file(
+        q.root()
+            .join("pending")
+            .join(format!("{}.json", path("a").hash())),
+    )
+    .unwrap();
     assert!(rescan(&q, &NoScanner, 5).unwrap().complete);
     assert!(q.status().unwrap().overflow.active);
 }
@@ -126,8 +158,16 @@ fn none_scanner_never_clears_overflow() {
 fn rescans_run_periodically() {
     let q = queue(10);
     let scanner = FakeScanner(Ok(Vec::new()));
-    let mut worker = Worker::new(q.clone(), &stockhouse_ingest::DeferredUploader, &scanner, limits());
-    let ran: Vec<bool> = [0, 500, 999, 1000, 1500, 2000].iter().map(|&t| worker.pass(t, &mut Vec::new()).unwrap().rescanned).collect();
+    let mut worker = Worker::new(
+        q.clone(),
+        &stockhouse_ingest::DeferredUploader,
+        &scanner,
+        limits(),
+    );
+    let ran: Vec<bool> = [0, 500, 999, 1000, 1500, 2000]
+        .iter()
+        .map(|&t| worker.pass(t, &mut Vec::new()).unwrap().rescanned)
+        .collect();
     assert_eq!(ran, [true, false, false, true, false, true]);
 }
 
@@ -149,22 +189,42 @@ const FORMAT_2: &str = r#"{"info":{
 fn nix_scanner_selects_locally_built_paths() {
     let hello = "/nix/store/pkf547jp8a92k4wmxikkyby58w10pysr-hello-1.0";
     for text in [FORMAT_1, FORMAT_2] {
-        let found: Vec<String> = parse_path_info(text.as_bytes()).unwrap().iter().map(|p| p.to_string()).collect();
+        let found: Vec<String> = parse_path_info(text.as_bytes())
+            .unwrap()
+            .iter()
+            .map(|p| p.to_string())
+            .collect();
         assert_eq!(found, [hello]);
     }
     let nix = fake_nix(FORMAT_1.as_bytes(), b"warning: noise\n", 0);
     let found = NixPathInfoScanner::new(nix).candidates().unwrap();
-    assert_eq!(found.iter().map(|p| p.to_string()).collect::<Vec<_>>(), [hello]);
+    assert_eq!(
+        found.iter().map(|p| p.to_string()).collect::<Vec<_>>(),
+        [hello]
+    );
 }
 
 #[cfg_attr(any(), bloomery("CLIENT-INGEST-RESCAN-009"))]
 #[test]
 fn unrecognized_scanner_output_is_an_error() {
-    for text in ["[]", "[{\"path\":\"/nix/store/x\"}]", "{\"/tmp/x\":{}}", "{\"/nix/store/pkf547jp8a92k4wmxikkyby58w10pysr-a\":1}", "nope"] {
-        assert_eq!(parse_path_info(text.as_bytes()), Err(ScanError::Format), "{text}");
+    for text in [
+        "[]",
+        "[{\"path\":\"/nix/store/x\"}]",
+        "{\"/tmp/x\":{}}",
+        "{\"/nix/store/pkf547jp8a92k4wmxikkyby58w10pysr-a\":1}",
+        "nope",
+    ] {
+        assert_eq!(
+            parse_path_info(text.as_bytes()),
+            Err(ScanError::Format),
+            "{text}"
+        );
     }
     let failing = fake_nix(b"", b"error", 1);
-    assert!(matches!(NixPathInfoScanner::new(failing).candidates(), Err(ScanError::Command(_))));
+    assert!(matches!(
+        NixPathInfoScanner::new(failing).candidates(),
+        Err(ScanError::Command(_))
+    ));
     let absent = NixPathInfoScanner::new(temp_dir().join("no-such-nix"));
     assert!(matches!(absent.candidates(), Err(ScanError::Command(_))));
     let dir = temp_dir();
@@ -172,11 +232,18 @@ fn unrecognized_scanner_output_is_an_error() {
     let script = format!("#!/bin/sh\nhead -c {} /dev/zero\n", 256 * 1024 * 1024 + 1);
     std::fs::write(&big, script).unwrap();
     std::fs::set_permissions(&big, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
-    while let Err(e) = std::process::Command::new(&big).arg("-n").stdout(std::process::Stdio::null()).status() {
+    while let Err(e) = std::process::Command::new(&big)
+        .arg("-n")
+        .stdout(std::process::Stdio::null())
+        .status()
+    {
         assert_eq!(e.raw_os_error(), Some(26), "{e}");
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
-    assert_eq!(NixPathInfoScanner::new(big).candidates(), Err(ScanError::TooLarge));
+    assert_eq!(
+        NixPathInfoScanner::new(big).candidates(),
+        Err(ScanError::TooLarge)
+    );
 }
 
 #[cfg_attr(any(), bloomery("CLIENT-INGEST-RESCAN-012"))]
@@ -184,5 +251,14 @@ fn unrecognized_scanner_output_is_an_error() {
 fn nix_scanner_passes_fixed_arguments() {
     let nix = fake_nix(b"{}", b"", 0);
     NixPathInfoScanner::new(nix.clone()).candidates().unwrap();
-    assert_eq!(recorded_args(&nix), ["--extra-experimental-features", "nix-command", "path-info", "--json", "--all"]);
+    assert_eq!(
+        recorded_args(&nix),
+        [
+            "--extra-experimental-features",
+            "nix-command",
+            "path-info",
+            "--json",
+            "--all"
+        ]
+    );
 }

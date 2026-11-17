@@ -46,22 +46,32 @@ pub fn drop_to_queue_owner(dir: &Path) -> Result<(), Refusal> {
     }
     // SAFETY: plain syscalls with valid arguments; the caller is single-threaded.
     let ok = unsafe {
-        libc::setgroups(0, std::ptr::null()) == 0 && libc::setgid(meta.gid()) == 0 && libc::setuid(meta.uid()) == 0
+        libc::setgroups(0, std::ptr::null()) == 0
+            && libc::setgid(meta.gid()) == 0
+            && libc::setuid(meta.uid()) == 0
     };
-    if ok { Ok(()) } else { Err(Refusal::PrivilegeDrop) }
+    if ok {
+        Ok(())
+    } else {
+        Err(Refusal::PrivilegeDrop)
+    }
 }
 
 /// Runs the hook for `out_paths` (Nix's `OUT_PATHS`). Never panics outward
 /// by design of its callers; every problem becomes one line on `log`.
 pub fn run(dir: &Path, out_paths: &str, now: u64, log: &mut dyn Write) -> HookReport {
     let mut report = HookReport::default();
-    let queue = match drop_to_queue_owner(dir).and_then(|()| Queue::open(dir).map_err(Refusal::Queue)) {
-        Ok(queue) => queue,
-        Err(refusal) => {
-            let _ = writeln!(log, "stockhouse post-build-hook: queue unavailable: {refusal:?}");
-            return report;
-        }
-    };
+    let queue =
+        match drop_to_queue_owner(dir).and_then(|()| Queue::open(dir).map_err(Refusal::Queue)) {
+            Ok(queue) => queue,
+            Err(refusal) => {
+                let _ = writeln!(
+                    log,
+                    "stockhouse post-build-hook: queue unavailable: {refusal:?}"
+                );
+                return report;
+            }
+        };
     let mut producer = match queue.producer() {
         Ok(producer) => producer,
         Err(e) => {
@@ -72,10 +82,17 @@ pub fn run(dir: &Path, out_paths: &str, now: u64, log: &mut dyn Write) -> HookRe
     for (index, entry) in out_paths.split_ascii_whitespace().enumerate() {
         let Ok(path) = StorePath::parse(entry) else {
             report.skipped += 1;
-            let _ = writeln!(log, "stockhouse post-build-hook: skipping invalid store path");
+            let _ = writeln!(
+                log,
+                "stockhouse post-build-hook: skipping invalid store path"
+            );
             continue;
         };
-        let outcome = if index < MAX_PATHS_PER_HOOK { producer.enqueue(&path, now, true) } else { producer.overflow().map(|()| EnqueueOutcome::Overflow) };
+        let outcome = if index < MAX_PATHS_PER_HOOK {
+            producer.enqueue(&path, now, true)
+        } else {
+            producer.overflow().map(|()| EnqueueOutcome::Overflow)
+        };
         match outcome {
             Ok(EnqueueOutcome::Queued(_)) => report.queued += 1,
             Ok(EnqueueOutcome::Overflow) => report.overflow += 1,

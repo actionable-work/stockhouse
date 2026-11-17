@@ -33,7 +33,9 @@ impl TierName {
 
     /// Parses a route segment.
     pub fn parse(text: &str) -> Option<Self> {
-        [Self::Private, Self::Shared, Self::Public].into_iter().find(|t| t.as_str() == text)
+        [Self::Private, Self::Shared, Self::Public]
+            .into_iter()
+            .find(|t| t.as_str() == text)
     }
 }
 
@@ -74,14 +76,29 @@ impl fmt::Display for ConfigError {
         match self {
             Self::Parse(message) => write!(f, "proxy configuration: {message}"),
             Self::UnsupportedVersion(v) => write!(f, "proxy configuration: {v}"),
-            Self::NonLoopbackListen => f.write_str("proxy configuration: listen must be a loopback address"),
+            Self::NonLoopbackListen => {
+                f.write_str("proxy configuration: listen must be a loopback address")
+            }
             Self::NoTiers => f.write_str("proxy configuration: no tier configured"),
-            Self::MissingTrustedKeys(t) => write!(f, "proxy configuration: {t} tier has no trusted keys"),
-            Self::InvalidTrustedKey(t) => write!(f, "proxy configuration: {t} tier has an invalid trusted key"),
+            Self::MissingTrustedKeys(t) => {
+                write!(f, "proxy configuration: {t} tier has no trusted keys")
+            }
+            Self::InvalidTrustedKey(t) => write!(
+                f,
+                "proxy configuration: {t} tier has an invalid trusted key"
+            ),
             Self::InvalidUrl(t) => write!(f, "proxy configuration: {t} tier URL is invalid"),
-            Self::CredentialOnPublicTier => f.write_str("proxy configuration: the public tier cannot have a credential"),
-            Self::CredentialOnFileTier(t) => write!(f, "proxy configuration: file tier {t} cannot have a credential"),
-            Self::CleartextCredential(t) => write!(f, "proxy configuration: {t} credential would be sent in cleartext"),
+            Self::CredentialOnPublicTier => {
+                f.write_str("proxy configuration: the public tier cannot have a credential")
+            }
+            Self::CredentialOnFileTier(t) => write!(
+                f,
+                "proxy configuration: file tier {t} cannot have a credential"
+            ),
+            Self::CleartextCredential(t) => write!(
+                f,
+                "proxy configuration: {t} credential would be sent in cleartext"
+            ),
         }
     }
 }
@@ -153,19 +170,35 @@ enum RawCredential {
 impl ProxyConfig {
     /// Parses and validates TOML configuration.
     pub fn parse(text: &str) -> Result<Self, ConfigError> {
-        let raw: RawConfig = toml::from_str(text).map_err(|e| ConfigError::Parse(e.message().to_owned()))?;
+        let raw: RawConfig =
+            toml::from_str(text).map_err(|e| ConfigError::Parse(e.message().to_owned()))?;
         check_version(raw.version).map_err(ConfigError::UnsupportedVersion)?;
-        let listen: SocketAddr = raw.listen.parse().map_err(|_| ConfigError::NonLoopbackListen)?;
+        let listen: SocketAddr = raw
+            .listen
+            .parse()
+            .map_err(|_| ConfigError::NonLoopbackListen)?;
         if !listen.ip().is_loopback() {
             return Err(ConfigError::NonLoopbackListen);
         }
-        let named = [(TierName::Private, raw.private), (TierName::Shared, raw.shared), (TierName::Public, raw.public)];
-        let tiers = named.into_iter().filter_map(|(n, t)| t.map(|t| tier(n, t))).collect::<Result<Vec<_>, _>>()?;
+        let named = [
+            (TierName::Private, raw.private),
+            (TierName::Shared, raw.shared),
+            (TierName::Public, raw.public),
+        ];
+        let tiers = named
+            .into_iter()
+            .filter_map(|(n, t)| t.map(|t| tier(n, t)))
+            .collect::<Result<Vec<_>, _>>()?;
         if tiers.is_empty() {
             return Err(ConfigError::NoTiers);
         }
         let timeout = Duration::from_secs(raw.request_timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS));
-        Ok(Self { listen, priority: raw.priority.unwrap_or(DEFAULT_PRIORITY), timeout, tiers })
+        Ok(Self {
+            listen,
+            priority: raw.priority.unwrap_or(DEFAULT_PRIORITY),
+            timeout,
+            tiers,
+        })
     }
 }
 
@@ -179,7 +212,12 @@ fn tier(name: TierName, raw: RawTier) -> Result<TierConfig, ConfigError> {
     if credential.is_some() {
         check_credential_placement(name, &url)?;
     }
-    Ok(TierConfig { name, url, keys, credential })
+    Ok(TierConfig {
+        name,
+        url,
+        keys,
+        credential,
+    })
 }
 
 fn tier_url(name: TierName, text: &str) -> Result<TierUrl, ConfigError> {
@@ -187,7 +225,10 @@ fn tier_url(name: TierName, text: &str) -> Result<TierUrl, ConfigError> {
     let clean = url.query().is_none() && url.fragment().is_none() && url.path().ends_with('/');
     match url.scheme() {
         _ if !clean => Err(ConfigError::InvalidUrl(name)),
-        "file" => url.to_file_path().map(TierUrl::File).map_err(|()| ConfigError::InvalidUrl(name)),
+        "file" => url
+            .to_file_path()
+            .map(TierUrl::File)
+            .map_err(|()| ConfigError::InvalidUrl(name)),
         "http" | "https" if url.host().is_some() => Ok(TierUrl::Http(url)),
         _ => Err(ConfigError::InvalidUrl(name)),
     }
@@ -197,15 +238,21 @@ fn trusted_keys(name: TierName, texts: &[String]) -> Result<TrustedKeys, ConfigE
     if texts.is_empty() {
         return Err(ConfigError::MissingTrustedKeys(name));
     }
-    let keys = texts.iter().map(|t| PublicKey::parse(t)).collect::<Result<Vec<_>, _>>();
-    keys.and_then(TrustedKeys::new).map_err(|_| ConfigError::InvalidTrustedKey(name))
+    let keys = texts
+        .iter()
+        .map(|t| PublicKey::parse(t))
+        .collect::<Result<Vec<_>, _>>();
+    keys.and_then(TrustedKeys::new)
+        .map_err(|_| ConfigError::InvalidTrustedKey(name))
 }
 
 fn check_credential_placement(name: TierName, url: &TierUrl) -> Result<(), ConfigError> {
     match url {
         _ if name == TierName::Public => Err(ConfigError::CredentialOnPublicTier),
         TierUrl::File(_) => Err(ConfigError::CredentialOnFileTier(name)),
-        TierUrl::Http(url) if url.scheme() == "http" && !is_loopback_host(url) => Err(ConfigError::CleartextCredential(name)),
+        TierUrl::Http(url) if url.scheme() == "http" && !is_loopback_host(url) => {
+            Err(ConfigError::CleartextCredential(name))
+        }
         TierUrl::Http(_) => Ok(()),
     }
 }
@@ -213,5 +260,6 @@ fn check_credential_placement(name: TierName, url: &TierUrl) -> Result<(), Confi
 fn is_loopback_host(url: &Url) -> bool {
     let host = url.host_str().unwrap_or_default();
     let host = host.trim_start_matches('[').trim_end_matches(']');
-    host.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())
+    host.parse::<std::net::IpAddr>()
+        .is_ok_and(|ip| ip.is_loopback())
 }

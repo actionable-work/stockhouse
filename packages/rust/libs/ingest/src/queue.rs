@@ -75,22 +75,32 @@ impl Queue {
         match fs::read_to_string(root.join("FORMAT")) {
             Ok(text) if text != FORMAT => return Err(QueueError::UnsupportedFormat),
             Ok(_) => {}
-            Err(_) => fsutil::replace(&root.join("tmp"), &root.join("FORMAT"), FORMAT.as_bytes()).map_err(io_err("write FORMAT"))?,
+            Err(_) => fsutil::replace(&root.join("tmp"), &root.join("FORMAT"), FORMAT.as_bytes())
+                .map_err(io_err("write FORMAT"))?,
         }
         let limits = format!("max_pending={max_pending}\n");
-        fsutil::replace(&root.join("tmp"), &root.join("LIMITS"), limits.as_bytes()).map_err(io_err("write LIMITS"))?;
-        Ok(Self { root: root.to_path_buf(), max_pending })
+        fsutil::replace(&root.join("tmp"), &root.join("LIMITS"), limits.as_bytes())
+            .map_err(io_err("write LIMITS"))?;
+        Ok(Self {
+            root: root.to_path_buf(),
+            max_pending,
+        })
     }
 
     /// Opens an existing queue without creating anything.
     pub fn open(root: &Path) -> Result<Self, QueueError> {
-        let format = fs::read_to_string(root.join("FORMAT")).map_err(|_| QueueError::NotInitialized)?;
+        let format =
+            fs::read_to_string(root.join("FORMAT")).map_err(|_| QueueError::NotInitialized)?;
         if format != FORMAT {
             return Err(QueueError::UnsupportedFormat);
         }
-        let limits = fs::read_to_string(root.join("LIMITS")).map_err(|_| QueueError::NotInitialized)?;
+        let limits =
+            fs::read_to_string(root.join("LIMITS")).map_err(|_| QueueError::NotInitialized)?;
         let max_pending = parse_limits(&limits).ok_or(QueueError::NotInitialized)?;
-        Ok(Self { root: root.to_path_buf(), max_pending })
+        Ok(Self {
+            root: root.to_path_buf(),
+            max_pending,
+        })
     }
 
     /// The configured capacity.
@@ -113,20 +123,31 @@ impl Queue {
 
     /// Number of pending records.
     pub fn pending_count(&self) -> Result<usize, QueueError> {
-        Ok(fsutil::stems(&self.root.join("pending"), ".json").map_err(io_err("list pending"))?.len())
+        Ok(fsutil::stems(&self.root.join("pending"), ".json")
+            .map_err(io_err("list pending"))?
+            .len())
     }
 
     /// Starts a producer batch, counting `pending/` once.
     pub fn producer(&self) -> Result<Producer<'_>, QueueError> {
-        Ok(Producer { queue: self, pending: self.pending_count()? })
+        Ok(Producer {
+            queue: self,
+            pending: self.pending_count()?,
+        })
     }
 
     /// Reads a record file; `Ok(None)` when absent, `Err(())` when corrupt.
-    pub(crate) fn read_record(&self, path: &Path) -> Result<Option<Result<Record, ()>>, QueueError> {
+    pub(crate) fn read_record(
+        &self,
+        path: &Path,
+    ) -> Result<Option<Result<Record, ()>>, QueueError> {
         match fs::read(path) {
             Ok(bytes) => Ok(Some(Record::from_json(&bytes).ok_or(()))),
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
-            Err(error) => Err(QueueError::Io { op: "read record", error }),
+            Err(error) => Err(QueueError::Io {
+                op: "read record",
+                error,
+            }),
         }
     }
 
@@ -135,7 +156,12 @@ impl Queue {
     }
 
     pub(crate) fn write_done(&self, record: &Record, now: u64) -> Result<(), QueueError> {
-        let done = DoneRecord { version: 1, id: record.id.to_string(), store_path: record.store_path.to_string(), uploaded_at: now };
+        let done = DoneRecord {
+            version: 1,
+            id: record.id.to_string(),
+            store_path: record.store_path.to_string(),
+            uploaded_at: now,
+        };
         let bytes = serde_json::to_vec(&done).expect("done record serializes");
         let target = self.path("done", record.store_path.hash().as_str(), ".json");
         fsutil::replace(&self.tmp(), &target, &bytes).map_err(io_err("write done"))
@@ -161,7 +187,12 @@ pub struct Producer<'q> {
 
 impl Producer<'_> {
     /// Enqueues one path. `record_overflow` appends to the overflow marker.
-    pub fn enqueue(&mut self, path: &StorePath, now: u64, record_overflow: bool) -> Result<EnqueueOutcome, QueueError> {
+    pub fn enqueue(
+        &mut self,
+        path: &StorePath,
+        now: u64,
+        record_overflow: bool,
+    ) -> Result<EnqueueOutcome, QueueError> {
         let q = self.queue;
         let hash = path.hash();
         if q.is_uploaded(hash.as_str()) {
@@ -175,7 +206,8 @@ impl Producer<'_> {
         }
         if self.pending >= q.max_pending {
             if record_overflow {
-                fsutil::append_marker(&q.root.join("overflow"), OVERFLOW_CAP).map_err(io_err("record overflow"))?;
+                fsutil::append_marker(&q.root.join("overflow"), OVERFLOW_CAP)
+                    .map_err(io_err("record overflow"))?;
             }
             return Ok(EnqueueOutcome::Overflow);
         }
@@ -186,7 +218,9 @@ impl Producer<'_> {
         let q = self.queue;
         let record = Record::new(path.clone(), now);
         let target = q.path("pending", path.hash().as_str(), ".json");
-        if fsutil::create_new(&q.tmp(), &target, &record.to_json()).map_err(io_err("write pending"))? {
+        if fsutil::create_new(&q.tmp(), &target, &record.to_json())
+            .map_err(io_err("write pending"))?
+        {
             self.pending += 1;
             return Ok(EnqueueOutcome::Queued(record.id));
         }
@@ -198,6 +232,7 @@ impl Producer<'_> {
 
     /// Records an overflow without attempting to enqueue.
     pub fn overflow(&self) -> Result<(), QueueError> {
-        fsutil::append_marker(&self.queue.root.join("overflow"), OVERFLOW_CAP).map_err(io_err("record overflow"))
+        fsutil::append_marker(&self.queue.root.join("overflow"), OVERFLOW_CAP)
+            .map_err(io_err("record overflow"))
     }
 }

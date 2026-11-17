@@ -22,5 +22,7 @@ pub use record::{DoneRecord, Record};
 pub use rescan::{RescanError, RescanReport, rescan};
 pub use scanner::{NixPathInfoScanner, NoScanner, ScanError, Scanner, parse_path_info};
 pub use status::{OverflowStatus, QueueStatus};
-pub use uploader::{DeferredUploader, NixCopyUploader, RetryKind, UploadJob, UploadOutcome, Uploader, backoff};
+pub use uploader::{
+    DeferredUploader, NixCopyUploader, RetryKind, UploadJob, UploadOutcome, Uploader, backoff,
+};
 pub use worker::{PassReport, Worker, WorkerLimits};

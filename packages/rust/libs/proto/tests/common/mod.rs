@@ -16,7 +16,10 @@ pub fn signing_key(seed: u8) -> SigningKey {
 pub fn public_key(name: &str, seed: u8) -> PublicKey {
     use base64::Engine;
     let bytes = signing_key(seed).verifying_key().to_bytes();
-    let text = format!("{name}:{}", base64::engine::general_purpose::STANDARD.encode(bytes));
+    let text = format!(
+        "{name}:{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    );
     PublicKey::parse(&text).expect("fixture key parses")
 }
 

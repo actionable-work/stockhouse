@@ -109,7 +109,9 @@ impl ProxyError {
     /// 503 for credential, denial and availability; 502 otherwise.
     pub fn status(&self) -> StatusCode {
         match self {
-            Self::Credential { .. } | Self::Denied { .. } | Self::Unavailable { .. } => StatusCode::SERVICE_UNAVAILABLE,
+            Self::Credential { .. } | Self::Denied { .. } | Self::Unavailable { .. } => {
+                StatusCode::SERVICE_UNAVAILABLE
+            }
             _ => StatusCode::BAD_GATEWAY,
         }
     }

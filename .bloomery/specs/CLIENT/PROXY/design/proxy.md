@@ -58,6 +58,10 @@ relative path under its base URL and classifies the outcome:
 | `Unavailable` | connect, read or timeout failure | other I/O errors |
 | `TooLarge` | body over the limit for that resource | same |
 
+`https://` tiers verify server certificates against the system trust store
+(rustls with the platform verifier); `http://` tiers configure no trust
+roots.
+
 A base URL must end in `/` so that relative joins stay under it (RFC 3986
 would otherwise replace its last segment). `file://` URLs name a directory.
 

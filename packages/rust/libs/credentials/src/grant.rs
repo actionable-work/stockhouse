@@ -14,7 +14,10 @@ pub enum GrantError {
 impl fmt::Display for GrantError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self::Unavailable { dependency } = self;
-        write!(f, "sign-in is not available yet: it requires server grants ({dependency})")
+        write!(
+            f,
+            "sign-in is not available yet: it requires server grants ({dependency})"
+        )
     }
 }
 
@@ -34,7 +37,9 @@ pub trait GrantFlow {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DeferredGrantFlow;
 
-const UNAVAILABLE: GrantError = GrantError::Unavailable { dependency: "P2.06" };
+const UNAVAILABLE: GrantError = GrantError::Unavailable {
+    dependency: "P2.06",
+};
 
 impl GrantFlow for DeferredGrantFlow {
     fn login(&self) -> Result<(), GrantError> {

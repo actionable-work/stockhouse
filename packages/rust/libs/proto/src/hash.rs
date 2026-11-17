@@ -45,7 +45,9 @@ impl Sha256 {
 
     /// Parses `sha256:<52 nix32>` or `sha256:<64 lowercase hex>`.
     pub fn parse(text: &str) -> Result<Self, HashError> {
-        let body = text.strip_prefix("sha256:").ok_or(HashError::UnsupportedAlgorithm)?;
+        let body = text
+            .strip_prefix("sha256:")
+            .ok_or(HashError::UnsupportedAlgorithm)?;
         let bytes = match body.len() {
             64 => decode_hex(body),
             _ => nix32::decode::<32>(body),

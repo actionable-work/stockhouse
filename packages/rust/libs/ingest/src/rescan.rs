@@ -40,13 +40,19 @@ impl From<QueueError> for RescanError {
 
 /// Reconciles the queue with the store's locally built paths.
 pub fn rescan(queue: &Queue, scanner: &dyn Scanner, now: u64) -> Result<RescanReport, RescanError> {
-    let (live, held) = (queue.root().join("overflow"), queue.root().join("overflow.rescan"));
+    let (live, held) = (
+        queue.root().join("overflow"),
+        queue.root().join("overflow.rescan"),
+    );
     if live.exists() && !held.exists() {
         fs::rename(&live, &held).map_err(io_err("take overflow"))?;
     }
     let candidates = scanner.candidates().map_err(RescanError::Scan)?;
     let mut producer = queue.producer()?;
-    let mut report = RescanReport { enqueued: 0, complete: true };
+    let mut report = RescanReport {
+        enqueued: 0,
+        complete: true,
+    };
     for path in &candidates {
         match producer.enqueue(path, now, false)? {
             EnqueueOutcome::Queued(_) => report.enqueued += 1,

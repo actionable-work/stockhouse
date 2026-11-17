@@ -5,7 +5,9 @@ use std::cell::RefCell;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use stockhouse_ingest::{Queue, ScanError, Scanner, UploadJob, UploadOutcome, Uploader, WorkerLimits};
+use stockhouse_ingest::{
+    Queue, ScanError, Scanner, UploadJob, UploadOutcome, Uploader, WorkerLimits,
+};
 use stockhouse_proto::{Sha256, StorePath, nix32};
 
 pub fn temp_dir() -> PathBuf {
@@ -27,7 +29,13 @@ pub fn queue(max: usize) -> Queue {
 }
 
 pub fn limits() -> WorkerLimits {
-    WorkerLimits { batch_size: 64, max_attempts: 3, backoff_base_secs: 5, backoff_max_secs: 100, rescan_interval_secs: 1000 }
+    WorkerLimits {
+        batch_size: 64,
+        max_attempts: 3,
+        backoff_base_secs: 5,
+        backoff_max_secs: 100,
+        rescan_interval_secs: 1000,
+    }
 }
 
 /// Answers each job with queued outcomes and records every job.
@@ -39,7 +47,10 @@ pub struct FakeUploader {
 
 impl FakeUploader {
     pub fn answering(outcomes: Vec<UploadOutcome>) -> Self {
-        Self { outcomes: RefCell::new(outcomes), jobs: RefCell::default() }
+        Self {
+            outcomes: RefCell::new(outcomes),
+            jobs: RefCell::default(),
+        }
     }
 }
 
@@ -47,7 +58,11 @@ impl Uploader for FakeUploader {
     fn upload(&self, job: &UploadJob) -> UploadOutcome {
         self.jobs.borrow_mut().push(job.clone());
         let mut outcomes = self.outcomes.borrow_mut();
-        if outcomes.is_empty() { UploadOutcome::Uploaded } else { outcomes.remove(0) }
+        if outcomes.is_empty() {
+            UploadOutcome::Uploaded
+        } else {
+            outcomes.remove(0)
+        }
     }
 }
 

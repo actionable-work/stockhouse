@@ -23,11 +23,21 @@ const USAGE: &str = "usage: stockhouse <command>
 /// The binary entry point.
 pub fn main(args: Vec<String>) -> ExitCode {
     let env = |name: &str| std::env::var(name).ok();
-    ExitCode::from(run(&args, &env, &mut std::io::stdout(), &mut std::io::stderr()))
+    ExitCode::from(run(
+        &args,
+        &env,
+        &mut std::io::stdout(),
+        &mut std::io::stderr(),
+    ))
 }
 
 /// Runs a command with injected environment and output streams.
-pub fn run(args: &[String], env: &dyn Fn(&str) -> Option<String>, out: &mut dyn Write, err: &mut dyn Write) -> u8 {
+pub fn run(
+    args: &[String],
+    env: &dyn Fn(&str) -> Option<String>,
+    out: &mut dyn Write,
+    err: &mut dyn Write,
+) -> u8 {
     match args::parse(args.get(1..).unwrap_or_default()) {
         Ok(parsed) => commands::dispatch(parsed, env, out, err),
         Err(error) => {

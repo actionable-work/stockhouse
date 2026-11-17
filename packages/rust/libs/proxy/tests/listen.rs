@@ -31,11 +31,23 @@ async fn occupied_port_fails_without_fallback() {
 async fn serves_its_own_cache_info() {
     let journal = journal();
     let upstream = Fixture::start("private", &journal).await;
-    let proxy = Proxy::start(&config(&[("private", tier(&upstream.url, ""))]).replace("version = 1\n", "version = 1\npriority = 41\n")).await;
+    let proxy = Proxy::start(
+        &config(&[("private", tier(&upstream.url, ""))])
+            .replace("version = 1\n", "version = 1\npriority = 41\n"),
+    )
+    .await;
     let (status, body) = proxy.get("/nix-cache-info").await;
     assert_eq!(status, 200);
-    assert_eq!(String::from_utf8(body).unwrap(), "StoreDir: /nix/store\nWantMassQuery: 1\nPriority: 41\n");
-    let head = proxy.client.head(format!("{}/nix-cache-info", proxy.base)).send().await.unwrap();
+    assert_eq!(
+        String::from_utf8(body).unwrap(),
+        "StoreDir: /nix/store\nWantMassQuery: 1\nPriority: 41\n"
+    );
+    let head = proxy
+        .client
+        .head(format!("{}/nix-cache-info", proxy.base))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(head.status(), 200);
     assert!(upstream.seen_all().is_empty());
 }
@@ -59,9 +71,19 @@ async fn only_get_and_head_are_accepted() {
     let upstream = Fixture::start("private", &journal).await;
     let proxy = Proxy::start(&config(&[("private", tier(&upstream.url, ""))])).await;
     let hash = hash_for("x");
-    let post = proxy.client.post(format!("{}/{hash}.narinfo", proxy.base)).send().await.unwrap();
+    let post = proxy
+        .client
+        .post(format!("{}/{hash}.narinfo", proxy.base))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(post.status(), 405);
-    let head_nar = proxy.client.head(format!("{}/nar/private/{hash}/nar/{hash}.nar", proxy.base)).send().await.unwrap();
+    let head_nar = proxy
+        .client
+        .head(format!("{}/nar/private/{hash}/nar/{hash}.nar", proxy.base))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(head_nar.status(), 405);
     assert!(upstream.seen_all().is_empty());
 }
@@ -73,7 +95,11 @@ async fn invalid_narinfo_hashes_are_rejected() {
     let upstream = Fixture::start("private", &journal).await;
     let proxy = Proxy::start(&config(&[("private", tier(&upstream.url, ""))])).await;
     for hash in ["short", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", ""] {
-        assert_eq!(proxy.status(&format!("/{hash}.narinfo")).await, 400, "{hash}");
+        assert_eq!(
+            proxy.status(&format!("/{hash}.narinfo")).await,
+            400,
+            "{hash}"
+        );
     }
     assert!(upstream.seen_all().is_empty());
 }

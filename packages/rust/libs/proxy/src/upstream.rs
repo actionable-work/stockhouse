@@ -58,17 +58,28 @@ pub(crate) enum Upstream {
 
 impl Upstream {
     pub(crate) fn http(base: Url, timeout: Duration) -> Result<Self, reqwest::Error> {
-        let client = Client::builder()
+        let mut builder = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(timeout)
-            .read_timeout(timeout)
-            .build()?;
+            .read_timeout(timeout);
+        if base.scheme() == "http" {
+            // Cleartext tiers need no trust roots; https tiers use the system verifier.
+            builder = builder.tls_certs_only(std::iter::empty::<reqwest::Certificate>());
+        }
+        let client = builder.build()?;
         Ok(Self::Http { base, client })
     }
 
     /// Fetches a small resource whole.
-    pub(crate) async fn fetch(&self, rel: &str, auth: Option<&Secret>, limit: u64) -> Result<Fetched<Bytes>, UpstreamError> {
-        let Fetched::Found((mut stream, _)) = self.open(rel, auth).await? else { return Ok(Fetched::NotFound) };
+    pub(crate) async fn fetch(
+        &self,
+        rel: &str,
+        auth: Option<&Secret>,
+        limit: u64,
+    ) -> Result<Fetched<Bytes>, UpstreamError> {
+        let Fetched::Found((mut stream, _)) = self.open(rel, auth).await? else {
+            return Ok(Fetched::NotFound);
+        };
         let mut out = Vec::new();
         while let Some(chunk) = stream.next().await {
             out.extend_from_slice(&chunk.map_err(|_| UpstreamError::Unavailable("read failed"))?);
@@ -80,7 +91,11 @@ impl Upstream {
     }
 
     /// Opens a resource as a stream with its length when known.
-    pub(crate) async fn open(&self, rel: &str, auth: Option<&Secret>) -> Result<Fetched<(ByteStream, Option<u64>)>, UpstreamError> {
+    pub(crate) async fn open(
+        &self,
+        rel: &str,
+        auth: Option<&Secret>,
+    ) -> Result<Fetched<(ByteStream, Option<u64>)>, UpstreamError> {
         match self {
             Self::File(dir) => open_file(dir.join(rel)).await,
             Self::Http { base, client } => open_http(client, base, rel, auth).await,
@@ -116,7 +131,9 @@ async fn open_http(
     rel: &str,
     auth: Option<&Secret>,
 ) -> Result<Fetched<(ByteStream, Option<u64>)>, UpstreamError> {
-    let url = base.join(rel).map_err(|_| UpstreamError::Unavailable("bad relative URL"))?;
+    let url = base
+        .join(rel)
+        .map_err(|_| UpstreamError::Unavailable("bad relative URL"))?;
     let mut request = client.get(url);
     if let Some(secret) = auth {
         request = request.header(AUTHORIZATION, bearer(secret)?);
@@ -130,14 +147,17 @@ async fn open_http(
         s => return Err(UpstreamError::Status(s.as_u16())),
     }
     let len = response.content_length();
-    let stream = response.bytes_stream().map(|r| r.map_err(std::io::Error::other));
+    let stream = response
+        .bytes_stream()
+        .map(|r| r.map_err(std::io::Error::other));
     Ok(Fetched::Found((stream.boxed(), len)))
 }
 
 fn bearer(secret: &Secret) -> Result<HeaderValue, UpstreamError> {
     let mut value = b"Bearer ".to_vec();
     value.extend_from_slice(secret.expose());
-    let mut header = HeaderValue::from_bytes(&value).map_err(|_| UpstreamError::Unavailable("credential not a header value"))?;
+    let mut header = HeaderValue::from_bytes(&value)
+        .map_err(|_| UpstreamError::Unavailable("credential not a header value"))?;
     header.set_sensitive(true);
     Ok(header)
 }

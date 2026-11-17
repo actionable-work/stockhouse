@@ -16,8 +16,16 @@ fn valid_store_path_parses() {
 #[cfg_attr(any(), bloomery("CLIENT-PROTO-STOREPATH-002"))]
 #[test]
 fn paths_outside_store_are_rejected() {
-    for text in [format!("/gnu/store/{HASH_A}-x"), format!("/nix/storex/{HASH_A}-x"), format!("nix/store/{HASH_A}-x")] {
-        assert_eq!(StorePath::parse(&text), Err(StorePathError::NotInStore), "{text}");
+    for text in [
+        format!("/gnu/store/{HASH_A}-x"),
+        format!("/nix/storex/{HASH_A}-x"),
+        format!("nix/store/{HASH_A}-x"),
+    ] {
+        assert_eq!(
+            StorePath::parse(&text),
+            Err(StorePathError::NotInStore),
+            "{text}"
+        );
     }
 }
 
@@ -26,11 +34,25 @@ fn paths_outside_store_are_rejected() {
 fn bad_hashes_are_rejected() {
     let short = &HASH_A[..31];
     let bad_char = "e".repeat(32);
-    for text in [format!("/nix/store/{short}-x"), format!("/nix/store/{bad_char}-x"), format!("/nix/store/{HASH_A}x-y")] {
-        assert_eq!(StorePath::parse(&text), Err(StorePathError::InvalidHash), "{text}");
+    for text in [
+        format!("/nix/store/{short}-x"),
+        format!("/nix/store/{bad_char}-x"),
+        format!("/nix/store/{HASH_A}x-y"),
+    ] {
+        assert_eq!(
+            StorePath::parse(&text),
+            Err(StorePathError::InvalidHash),
+            "{text}"
+        );
     }
-    assert_eq!(StorePathHash::parse(short), Err(StorePathError::InvalidHash));
-    assert_eq!(StorePathHash::parse(&bad_char), Err(StorePathError::InvalidHash));
+    assert_eq!(
+        StorePathHash::parse(short),
+        Err(StorePathError::InvalidHash)
+    );
+    assert_eq!(
+        StorePathHash::parse(&bad_char),
+        Err(StorePathError::InvalidHash)
+    );
     assert_eq!(StorePathHash::parse(HASH_A).unwrap().as_str(), HASH_A);
 }
 
@@ -38,9 +60,20 @@ fn bad_hashes_are_rejected() {
 #[test]
 fn bad_names_are_rejected() {
     let long = "a".repeat(212);
-    for name in ["", ".hidden", "has space", "slash/x", "uni\u{e9}", long.as_str()] {
+    for name in [
+        "",
+        ".hidden",
+        "has space",
+        "slash/x",
+        "uni\u{e9}",
+        long.as_str(),
+    ] {
         let text = format!("/nix/store/{HASH_A}-{name}");
-        assert_eq!(StorePath::parse(&text), Err(StorePathError::InvalidName), "{name:?}");
+        assert_eq!(
+            StorePath::parse(&text),
+            Err(StorePathError::InvalidName),
+            "{name:?}"
+        );
     }
     let max = "a".repeat(211);
     assert!(StorePath::parse(&format!("/nix/store/{HASH_A}-{max}")).is_ok());
@@ -52,6 +85,12 @@ fn bad_names_are_rejected() {
 fn basenames_parse_with_same_rules() {
     let path = StorePath::from_basename(&format!("{HASH_B}-ncurses")).unwrap();
     assert_eq!(path.as_str(), format!("/nix/store/{HASH_B}-ncurses"));
-    assert_eq!(StorePath::from_basename("short-x"), Err(StorePathError::InvalidHash));
-    assert_eq!(StorePath::from_basename(&format!("{HASH_B}-.x")), Err(StorePathError::InvalidName));
+    assert_eq!(
+        StorePath::from_basename("short-x"),
+        Err(StorePathError::InvalidHash)
+    );
+    assert_eq!(
+        StorePath::from_basename(&format!("{HASH_B}-.x")),
+        Err(StorePathError::InvalidName)
+    );
 }

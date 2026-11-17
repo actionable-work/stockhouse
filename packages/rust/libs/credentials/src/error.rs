@@ -39,14 +39,19 @@ impl fmt::Display for CredentialError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotConfigured => f.write_str("credential: no source configured"),
-            Self::RelativePath => f.write_str("credential file: path must be absolute and normalized"),
+            Self::RelativePath => {
+                f.write_str("credential file: path must be absolute and normalized")
+            }
             Self::InStore => f.write_str("credential file: path is in the Nix store"),
             Self::Missing => f.write_str("credential file: missing"),
             Self::Symlink => f.write_str("credential file: symbolic link refused"),
             Self::Unreadable => f.write_str("credential file: unreadable"),
             Self::NotRegularFile => f.write_str("credential file: not a regular file"),
             Self::WrongOwner => f.write_str("credential file: owned by another user"),
-            Self::PermissionsTooOpen { mode } => write!(f, "credential file: mode {mode:04o} grants group or other access"),
+            Self::PermissionsTooOpen { mode } => write!(
+                f,
+                "credential file: mode {mode:04o} grants group or other access"
+            ),
             Self::TooLarge => f.write_str("credential file: larger than 4096 bytes"),
             Self::Empty => f.write_str("credential file: empty"),
             Self::Malformed => f.write_str("credential file: content is not visible ASCII"),

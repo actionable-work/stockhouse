@@ -21,11 +21,21 @@ pub struct Reply {
 
 impl Reply {
     pub fn ok(body: impl Into<Vec<u8>>) -> Reply {
-        Reply { status: 200, body: body.into(), delay: Duration::ZERO, location: None }
+        Reply {
+            status: 200,
+            body: body.into(),
+            delay: Duration::ZERO,
+            location: None,
+        }
     }
 
     pub fn status(status: u16) -> Reply {
-        Reply { status, body: Vec::new(), delay: Duration::ZERO, location: None }
+        Reply {
+            status,
+            body: Vec::new(),
+            delay: Duration::ZERO,
+            location: None,
+        }
     }
 }
 
@@ -56,14 +66,25 @@ impl Fixture {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}/", listener.local_addr().unwrap());
         let replies = Arc::new(Mutex::new(HashMap::new()));
-        replies.lock().unwrap().insert("/nix-cache-info".to_owned(), Reply::ok("StoreDir: /nix/store\n"));
-        let fixture = Fixture { name: name.to_owned(), url, replies, journal: journal.clone() };
+        replies.lock().unwrap().insert(
+            "/nix-cache-info".to_owned(),
+            Reply::ok("StoreDir: /nix/store\n"),
+        );
+        let fixture = Fixture {
+            name: name.to_owned(),
+            url,
+            replies,
+            journal: journal.clone(),
+        };
         tokio::spawn(fixture.clone().serve(listener));
         fixture
     }
 
     pub fn set(&self, path: &str, reply: Reply) {
-        self.replies.lock().unwrap().insert(format!("/{path}"), reply);
+        self.replies
+            .lock()
+            .unwrap()
+            .insert(format!("/{path}"), reply);
     }
 
     pub fn add(&self, entry: &super::Entry) {
@@ -74,7 +95,9 @@ impl Fixture {
     /// Requests this fixture saw, excluding nix-cache-info.
     pub fn seen(&self) -> Vec<Seen> {
         let all = self.journal.lock().unwrap().clone();
-        all.into_iter().filter(|s| s.fixture == self.name && s.path != "/nix-cache-info").collect()
+        all.into_iter()
+            .filter(|s| s.fixture == self.name && s.path != "/nix-cache-info")
+            .collect()
     }
 
     /// Every request seen by every fixture sharing this journal, in order.
@@ -83,7 +106,13 @@ impl Fixture {
     }
 
     pub fn seen_all(&self) -> Vec<Seen> {
-        self.journal.lock().unwrap().iter().filter(|s| s.fixture == self.name).cloned().collect()
+        self.journal
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|s| s.fixture == self.name)
+            .cloned()
+            .collect()
     }
 
     async fn serve(self, listener: TcpListener) {
@@ -95,21 +124,38 @@ impl Fixture {
                     let me = me.clone();
                     async move { Ok::<_, std::convert::Infallible>(me.respond(req).await) }
                 });
-                let _ = http1::Builder::new().serve_connection(TokioIo::new(stream), service).await;
+                let _ = http1::Builder::new()
+                    .serve_connection(TokioIo::new(stream), service)
+                    .await;
             });
         }
     }
 
     async fn respond<B>(&self, req: Request<B>) -> Response<Full<Bytes>> {
         let path = req.uri().path().to_owned();
-        let authorization = req.headers().get("authorization").map(|v| v.to_str().unwrap().to_owned());
-        self.journal.lock().unwrap().push(Seen { fixture: self.name.clone(), path: path.clone(), authorization });
-        let reply = self.replies.lock().unwrap().get(&path).cloned().unwrap_or(Reply::status(404));
+        let authorization = req
+            .headers()
+            .get("authorization")
+            .map(|v| v.to_str().unwrap().to_owned());
+        self.journal.lock().unwrap().push(Seen {
+            fixture: self.name.clone(),
+            path: path.clone(),
+            authorization,
+        });
+        let reply = self
+            .replies
+            .lock()
+            .unwrap()
+            .get(&path)
+            .cloned()
+            .unwrap_or(Reply::status(404));
         tokio::time::sleep(reply.delay).await;
         let mut response = Response::new(Full::new(Bytes::from(reply.body)));
         *response.status_mut() = StatusCode::from_u16(reply.status).unwrap();
         if let Some(location) = reply.location {
-            response.headers_mut().insert("location", location.parse().unwrap());
+            response
+                .headers_mut()
+                .insert("location", location.parse().unwrap());
         }
         response
     }

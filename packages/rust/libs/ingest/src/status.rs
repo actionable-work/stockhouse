@@ -36,7 +36,9 @@ impl Queue {
     pub fn overflow_status(&self) -> Result<OverflowStatus, QueueError> {
         let mut status = OverflowStatus::default();
         for name in ["overflow", "overflow.rescan"] {
-            if let Some(len) = fsutil::size(&self.root().join(name)).map_err(io_err("read overflow"))? {
+            if let Some(len) =
+                fsutil::size(&self.root().join(name)).map_err(io_err("read overflow"))?
+            {
                 status.active = true;
                 status.dropped += len;
                 status.truncated |= len >= OVERFLOW_CAP;
@@ -47,15 +49,27 @@ impl Queue {
 
     /// Counts records and reports overflow.
     pub fn status(&self) -> Result<QueueStatus, QueueError> {
-        let pending = fsutil::stems(&self.root().join("pending"), ".json").map_err(io_err("list pending"))?;
-        let failed = fsutil::stems(&self.root().join("failed"), "").map_err(io_err("list failed"))?.len();
-        let uploaded = fsutil::stems(&self.root().join("done"), ".json").map_err(io_err("list done"))?.len();
+        let pending =
+            fsutil::stems(&self.root().join("pending"), ".json").map_err(io_err("list pending"))?;
+        let failed = fsutil::stems(&self.root().join("failed"), "")
+            .map_err(io_err("list failed"))?
+            .len();
+        let uploaded = fsutil::stems(&self.root().join("done"), ".json")
+            .map_err(io_err("list done"))?
+            .len();
         let next_attempt_at = pending
             .iter()
             .filter_map(|stem| std::fs::read(self.path("pending", stem, ".json")).ok())
             .filter_map(|bytes| Record::from_json(&bytes))
             .map(|r| r.next_attempt_at)
             .min();
-        Ok(QueueStatus { version: 1, pending: pending.len(), failed, uploaded, next_attempt_at, overflow: self.overflow_status()? })
+        Ok(QueueStatus {
+            version: 1,
+            pending: pending.len(),
+            failed,
+            uploaded,
+            next_attempt_at,
+            overflow: self.overflow_status()?,
+        })
     }
 }

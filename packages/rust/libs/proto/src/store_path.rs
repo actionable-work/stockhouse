@@ -38,7 +38,11 @@ impl StorePathHash {
     /// Parses a bare store path hash.
     pub fn parse(text: &str) -> Result<Self, StorePathError> {
         let valid = text.len() == HASH_LEN && text.bytes().all(|c| nix32::digit(c).is_some());
-        if valid { Ok(Self(text.to_owned())) } else { Err(StorePathError::InvalidHash) }
+        if valid {
+            Ok(Self(text.to_owned()))
+        } else {
+            Err(StorePathError::InvalidHash)
+        }
     }
 
     /// The hash text.
@@ -73,9 +77,13 @@ impl StorePath {
     pub fn from_basename(base: &str) -> Result<Self, StorePathError> {
         let hash = base.get(..HASH_LEN).ok_or(StorePathError::InvalidHash)?;
         StorePathHash::parse(hash)?;
-        let name = base[HASH_LEN..].strip_prefix('-').ok_or(StorePathError::InvalidHash)?;
+        let name = base[HASH_LEN..]
+            .strip_prefix('-')
+            .ok_or(StorePathError::InvalidHash)?;
         validate_name(name)?;
-        Ok(Self { full: format!("{STORE_DIR}/{base}") })
+        Ok(Self {
+            full: format!("{STORE_DIR}/{base}"),
+        })
     }
 
     /// The full path text.
@@ -103,8 +111,14 @@ fn validate_name(name: &str) -> Result<(), StorePathError> {
     let ok = !name.is_empty()
         && name.len() <= MAX_NAME_LEN
         && !name.starts_with('.')
-        && name.bytes().all(|c| c.is_ascii_alphanumeric() || b"+-._?=".contains(&c));
-    if ok { Ok(()) } else { Err(StorePathError::InvalidName) }
+        && name
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b"+-._?=".contains(&c));
+    if ok {
+        Ok(())
+    } else {
+        Err(StorePathError::InvalidName)
+    }
 }
 
 impl fmt::Display for StorePath {

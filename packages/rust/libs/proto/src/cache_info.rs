@@ -77,13 +77,20 @@ impl NixCacheInfo {
         }
         let text = std::str::from_utf8(input).map_err(|_| CacheInfoError::NotUtf8)?;
         let fields = lines::collect(text, KNOWN, None)?;
-        let store_dir = fields.get("StoreDir").ok_or(CacheInfoError::MissingField("StoreDir"))?;
+        let store_dir = fields
+            .get("StoreDir")
+            .ok_or(CacheInfoError::MissingField("StoreDir"))?;
         if store_dir != STORE_DIR {
-            return Err(CacheInfoError::StoreDirMismatch { found: store_dir.to_owned() });
+            return Err(CacheInfoError::StoreDirMismatch {
+                found: store_dir.to_owned(),
+            });
         }
         let want_mass_query = fields.get("WantMassQuery").map(parse_flag).transpose()?;
         let priority = fields.get("Priority").map(parse_priority).transpose()?;
-        Ok(Self { want_mass_query, priority })
+        Ok(Self {
+            want_mass_query,
+            priority,
+        })
     }
 
     /// Renders `nix-cache-info` text.

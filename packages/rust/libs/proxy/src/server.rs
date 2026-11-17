@@ -27,31 +27,48 @@ pub struct BoundServer {
 /// Binds exactly the configured address; an occupied port is an error.
 pub async fn bind(config: &ProxyConfig, log: LogSink) -> Result<BoundServer, ServeError> {
     let addr = config.listen;
-    let listener = TcpListener::bind(addr).await.map_err(|error| match error.kind() {
-        ErrorKind::AddrInUse => ServeError::AddressInUse { addr },
-        _ => ServeError::Bind { addr, error },
-    })?;
-    let state = State { lookup: Lookup::new(config)?, priority: config.priority, log };
-    Ok(BoundServer { listener, state: Arc::new(state) })
+    let listener = TcpListener::bind(addr)
+        .await
+        .map_err(|error| match error.kind() {
+            ErrorKind::AddrInUse => ServeError::AddressInUse { addr },
+            _ => ServeError::Bind { addr, error },
+        })?;
+    let state = State {
+        lookup: Lookup::new(config)?,
+        priority: config.priority,
+        log,
+    };
+    Ok(BoundServer {
+        listener,
+        state: Arc::new(state),
+    })
 }
 
 impl BoundServer {
     /// The bound address.
     pub fn local_addr(&self) -> SocketAddr {
-        self.listener.local_addr().expect("bound listener has an address")
+        self.listener
+            .local_addr()
+            .expect("bound listener has an address")
     }
 
     /// Serves connections until the task is dropped.
     pub async fn run(self) {
         loop {
-            let Ok((stream, _)) = self.listener.accept().await else { continue };
+            let Ok((stream, _)) = self.listener.accept().await else {
+                continue;
+            };
             let state = Arc::clone(&self.state);
             tokio::spawn(async move {
                 let service = service_fn(move |request| {
                     let state = Arc::clone(&state);
-                    async move { Ok::<_, std::convert::Infallible>(routes::handle(&state, request).await) }
+                    async move {
+                        Ok::<_, std::convert::Infallible>(routes::handle(&state, request).await)
+                    }
                 });
-                let _ = http1::Builder::new().serve_connection(TokioIo::new(stream), service).await;
+                let _ = http1::Builder::new()
+                    .serve_connection(TokioIo::new(stream), service)
+                    .await;
             });
         }
     }

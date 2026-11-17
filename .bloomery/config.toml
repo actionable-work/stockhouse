@@ -98,6 +98,12 @@ enable = true
 packages = []
 shellHook = ""
 
+[flakes.tests]
+apps = false
+checks = "individual"
+packages = false
+path = "tests"
+
 [formatters]
 
 [formatters.alejandra]

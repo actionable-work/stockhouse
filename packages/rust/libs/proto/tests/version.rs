@@ -1,12 +1,26 @@
-use stockhouse_proto::{PROTOCOL_VERSION, UnsupportedVersion, UploadId, UploadIdError, check_version};
+use stockhouse_proto::{
+    PROTOCOL_VERSION, UnsupportedVersion, UploadId, UploadIdError, check_version,
+};
 
 #[cfg_attr(any(), bloomery("CLIENT-PROTO-VERSION-001"))]
 #[test]
 fn unknown_versions_are_rejected() {
     assert_eq!(PROTOCOL_VERSION, 1);
     assert_eq!(check_version(1), Ok(()));
-    assert_eq!(check_version(2), Err(UnsupportedVersion { found: 2, supported: 1 }));
-    assert_eq!(check_version(0), Err(UnsupportedVersion { found: 0, supported: 1 }));
+    assert_eq!(
+        check_version(2),
+        Err(UnsupportedVersion {
+            found: 2,
+            supported: 1
+        })
+    );
+    assert_eq!(
+        check_version(0),
+        Err(UnsupportedVersion {
+            found: 0,
+            supported: 1
+        })
+    );
 }
 
 #[cfg_attr(any(), bloomery("CLIENT-PROTO-VERSION-002"))]

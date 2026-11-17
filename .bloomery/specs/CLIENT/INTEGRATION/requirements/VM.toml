@@ -131,4 +131,3 @@ type = "event"
 trigger = "the VM tests run"
 system = "VM test suite"
 action = "run every VM requirement once with Nix 2.34.8 and once with Nix 2.31.5 as both client and daemon"
-

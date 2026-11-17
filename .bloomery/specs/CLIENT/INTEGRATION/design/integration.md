@@ -94,14 +94,19 @@ used as both the client and the daemon (`nix.package`):
 
 ## VM qualification
 
-`tests/vm.test.nix` defines one NixOS VM test per pinned Nix version. A
+The VM tests are four stories (`tests/vm-{proxy,substitution,durability,lifecycle}.test.nix`),
+each run as one NixOS VM test per pinned Nix version on the shared node in
+`tests/lib/vm.nix`. Each story traces at most five requirements. A
 fixture signing key is written in the VM at runtime from a constant public
 seed and set as the daemon's `secret-key-files`, so locally built paths are
 signed. It is synthetic and trusted only inside the test VM. The VM has no
 network, a `file://` private tier that is also the `nix-copy` destination, and
 a loopback HTTP shared-tier fixture. The fixture records request headers,
 answers 403 and 500 for two chosen hashes and 404 otherwise, so denied and
-unavailable tiers are exercised through real Nix and the real proxy.
+unavailable tiers are exercised through real Nix and the real proxy. The node
+sets `narinfo-cache-negative-ttl = 0`, because every build first queries the
+proxy and a cached miss would hide the later upload, and it keeps the
+writable store on disk so built paths survive the reboot story.
 
-`tests/module.test.nix` evaluates the module without a VM to check generated
-units, configuration and assertions.
+`tests/module-{proxy,ingest}.test.nix` evaluate the module without a VM to
+check generated units, configuration and assertions.

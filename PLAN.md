@@ -32,8 +32,8 @@ Removed at cleanup; the lasting record is `docs/P2_09_CLIENT_GROUNDWORK.md`.
    usage and exit codes. Tests call `main` with argument vectors, and a
    thin-binary test inspects `packages/rust/bins/`.
 6. **Nix**: `nix/module.nix`, flake `extraOutputs` (`nixosModules`), the
-   `tests/` subflake with `module.test.nix` (evaluation) and `vm.test.nix`
-   (two Nix versions), restricted to `x86_64-linux`.
+   `tests/` subflake with module-evaluation stories and VM stories
+   (each on two Nix versions), restricted to `x86_64-linux`.
 7. **Records**: `docs/P2_09_CLIENT_GROUNDWORK.md` with behavior, non-claims,
    deferred P2.06/P2.08 items and the P2.08a reconciliation follow-up. Then the
    independent implementation review, fixes, `bloomery check`,

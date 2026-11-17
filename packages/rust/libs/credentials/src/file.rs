@@ -50,12 +50,18 @@ pub struct SystemdCredential {
 impl SystemdCredential {
     /// Reads `CREDENTIALS_DIRECTORY` from the environment on every use.
     pub fn new(name: String) -> Self {
-        Self { name, directory: None }
+        Self {
+            name,
+            directory: None,
+        }
     }
 
     /// Uses an explicit directory (`None` behaves as an unset variable).
     pub fn with_directory(name: String, directory: Option<PathBuf>) -> Self {
-        Self { name, directory: Some(directory) }
+        Self {
+            name,
+            directory: Some(directory),
+        }
     }
 
     fn directory(&self) -> Option<PathBuf> {
@@ -69,7 +75,10 @@ impl SystemdCredential {
 impl CredentialSource for SystemdCredential {
     fn credential(&self) -> Result<Secret, CredentialError> {
         let dir = self.directory().ok_or(CredentialError::NotConfigured)?;
-        let plain = !self.name.is_empty() && self.name != "." && self.name != ".." && !self.name.contains('/');
+        let plain = !self.name.is_empty()
+            && self.name != "."
+            && self.name != ".."
+            && !self.name.contains('/');
         if !plain {
             return Err(CredentialError::InvalidName);
         }
@@ -88,16 +97,24 @@ fn check_path(path: &Path) -> Result<(), CredentialError> {
     if !path.is_absolute() || !normal {
         return Err(CredentialError::RelativePath);
     }
-    if path.starts_with("/nix/store") { Err(CredentialError::InStore) } else { Ok(()) }
+    if path.starts_with("/nix/store") {
+        Err(CredentialError::InStore)
+    } else {
+        Ok(())
+    }
 }
 
 fn open(path: &Path) -> Result<File, CredentialError> {
     let flags = libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK;
-    OpenOptions::new().read(true).custom_flags(flags).open(path).map_err(|e| match e.kind() {
-        ErrorKind::NotFound => CredentialError::Missing,
-        _ if e.raw_os_error() == Some(libc::ELOOP) => CredentialError::Symlink,
-        _ => CredentialError::Unreadable,
-    })
+    OpenOptions::new()
+        .read(true)
+        .custom_flags(flags)
+        .open(path)
+        .map_err(|e| match e.kind() {
+            ErrorKind::NotFound => CredentialError::Missing,
+            _ if e.raw_os_error() == Some(libc::ELOOP) => CredentialError::Symlink,
+            _ => CredentialError::Unreadable,
+        })
 }
 
 fn check_owner(uid: u32, mode: u32, euid: u32) -> Result<(), CredentialError> {
@@ -105,14 +122,18 @@ fn check_owner(uid: u32, mode: u32, euid: u32) -> Result<(), CredentialError> {
         return Err(CredentialError::WrongOwner);
     }
     if mode & 0o077 != 0 {
-        return Err(CredentialError::PermissionsTooOpen { mode: mode & 0o7777 });
+        return Err(CredentialError::PermissionsTooOpen {
+            mode: mode & 0o7777,
+        });
     }
     Ok(())
 }
 
 fn read_content(file: File) -> Result<Secret, CredentialError> {
     let mut bytes = Vec::new();
-    file.take(MAX_BYTES + 1).read_to_end(&mut bytes).map_err(|_| CredentialError::Unreadable)?;
+    file.take(MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| CredentialError::Unreadable)?;
     let secret = Secret::new(bytes);
     let mut content = secret.expose();
     if content.len() as u64 > MAX_BYTES {

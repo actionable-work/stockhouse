@@ -71,7 +71,13 @@ impl NixPathInfoScanner {
 impl Scanner for NixPathInfoScanner {
     fn candidates(&self) -> Result<Vec<StorePath>, ScanError> {
         let mut child = Command::new(&self.nix)
-            .args(["--extra-experimental-features", "nix-command", "path-info", "--json", "--all"])
+            .args([
+                "--extra-experimental-features",
+                "nix-command",
+                "path-info",
+                "--json",
+                "--all",
+            ])
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -85,7 +91,9 @@ impl Scanner for NixPathInfoScanner {
             let _ = child.wait();
             return Err(ScanError::TooLarge);
         }
-        let status = child.wait().map_err(|e| ScanError::Command(e.to_string()))?;
+        let status = child
+            .wait()
+            .map_err(|e| ScanError::Command(e.to_string()))?;
         read.map_err(|e| ScanError::Command(e.to_string()))?;
         if !status.success() {
             return Err(ScanError::Command(format!("exit status {status}")));
@@ -104,12 +112,18 @@ pub fn parse_path_info(bytes: &[u8]) -> Result<Vec<StorePath>, ScanError> {
     }
 }
 
-fn select<E>(entries: &Map<String, Value>, parse: fn(&str) -> Result<StorePath, E>) -> Result<Vec<StorePath>, ScanError> {
+fn select<E>(
+    entries: &Map<String, Value>,
+    parse: fn(&str) -> Result<StorePath, E>,
+) -> Result<Vec<StorePath>, ScanError> {
     let mut out = Vec::new();
     for (key, info) in entries {
         let path = parse(key).map_err(|_| ScanError::Format)?;
         let ultimate = match info {
-            Value::Object(fields) => fields.get("ultimate").and_then(Value::as_bool).unwrap_or(false),
+            Value::Object(fields) => fields
+                .get("ultimate")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
             Value::Null => false,
             _ => return Err(ScanError::Format),
         };

@@ -72,7 +72,12 @@ impl NixCopyUploader {
 impl Uploader for NixCopyUploader {
     fn upload(&self, job: &UploadJob) -> UploadOutcome {
         let output = Command::new(&self.nix)
-            .args(["--extra-experimental-features", "nix-command", "copy", "--to"])
+            .args([
+                "--extra-experimental-features",
+                "nix-command",
+                "copy",
+                "--to",
+            ])
             .arg(&self.destination)
             .arg(job.store_path.as_str())
             .stdin(Stdio::null())
@@ -82,7 +87,10 @@ impl Uploader for NixCopyUploader {
         match output {
             Ok(out) if out.status.success() => UploadOutcome::Uploaded,
             Ok(out) => UploadOutcome::Retry(RetryKind::Transient, bounded(&out.stderr)),
-            Err(error) => UploadOutcome::Retry(RetryKind::Transient, bounded(format!("cannot start nix: {error}").as_bytes())),
+            Err(error) => UploadOutcome::Retry(
+                RetryKind::Transient,
+                bounded(format!("cannot start nix: {error}").as_bytes()),
+            ),
         }
     }
 }
@@ -98,5 +106,6 @@ fn bounded(bytes: &[u8]) -> String {
 /// `min(base * 2^(attempts-1), max)` for `attempts >= 1`.
 pub fn backoff(attempts: u32, base: u64, max: u64) -> u64 {
     let exponent = attempts.saturating_sub(1).min(63);
-    base.checked_mul(1u64 << exponent).map_or(max, |delay| delay.min(max))
+    base.checked_mul(1u64 << exponent)
+        .map_or(max, |delay| delay.min(max))
 }

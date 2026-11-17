@@ -10,7 +10,11 @@ fn stage(tmp: &Path, bytes: &[u8]) -> io::Result<std::path::PathBuf> {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
     let path = tmp.join(format!("{}-{n}.tmp", std::process::id()));
-    let mut file = OpenOptions::new().write(true).create_new(true).custom_flags(libc::O_NOFOLLOW).open(&path)?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(&path)?;
     file.write_all(bytes)?;
     file.sync_all()?;
     Ok(path)
@@ -54,7 +58,12 @@ pub(crate) fn remove(path: &Path) -> io::Result<()> {
 
 /// Appends one byte unless the file has reached `cap` bytes.
 pub(crate) fn append_marker(path: &Path, cap: u64) -> io::Result<()> {
-    let mut file = OpenOptions::new().append(true).create(true).mode(0o644).custom_flags(libc::O_NOFOLLOW).open(path)?;
+    let mut file = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .mode(0o644)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)?;
     if file.metadata()?.len() < cap {
         file.write_all(b"o")?;
     }

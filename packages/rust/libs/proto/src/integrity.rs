@@ -26,8 +26,12 @@ pub enum IntegrityError {
 impl fmt::Display for IntegrityError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::SizeExceeded { expected } => write!(f, "content exceeds expected {expected} bytes"),
-            Self::SizeMismatch { expected, actual } => write!(f, "content is {actual} bytes, expected {expected}"),
+            Self::SizeExceeded { expected } => {
+                write!(f, "content exceeds expected {expected} bytes")
+            }
+            Self::SizeMismatch { expected, actual } => {
+                write!(f, "content is {actual} bytes, expected {expected}")
+            }
             Self::HashMismatch => f.write_str("content hash mismatch"),
         }
     }
@@ -48,8 +52,14 @@ impl NarInfo {
     /// `FileHash`/`FileSize`, else `NarHash`/`NarSize` when uncompressed, else none.
     pub fn served_integrity(&self) -> Option<ServedIntegrity> {
         match (&self.file, self.compression) {
-            (Some(file), _) => Some(ServedIntegrity { size: file.size, hash: file.hash }),
-            (None, Compression::None) => Some(ServedIntegrity { size: self.nar_size, hash: self.nar_hash }),
+            (Some(file), _) => Some(ServedIntegrity {
+                size: file.size,
+                hash: file.hash,
+            }),
+            (None, Compression::None) => Some(ServedIntegrity {
+                size: self.nar_size,
+                hash: self.nar_hash,
+            }),
             (None, _) => None,
         }
     }
@@ -66,14 +76,20 @@ pub struct ContentVerifier {
 impl ContentVerifier {
     /// Starts verifying against an expected size and hash.
     pub fn new(expected: ServedIntegrity) -> Self {
-        Self { expected, seen: 0, hasher: sha2::Sha256::new() }
+        Self {
+            expected,
+            seen: 0,
+            hasher: sha2::Sha256::new(),
+        }
     }
 
     /// Consumes a chunk, failing as soon as the size is exceeded.
     pub fn update(&mut self, chunk: &[u8]) -> Result<(), IntegrityError> {
         self.seen = self.seen.saturating_add(chunk.len() as u64);
         if self.seen > self.expected.size {
-            return Err(IntegrityError::SizeExceeded { expected: self.expected.size });
+            return Err(IntegrityError::SizeExceeded {
+                expected: self.expected.size,
+            });
         }
         self.hasher.update(chunk);
         Ok(())
@@ -87,9 +103,16 @@ impl ContentVerifier {
     /// Finishes, checking size and hash.
     pub fn finish(self) -> Result<(), IntegrityError> {
         if self.seen != self.expected.size {
-            return Err(IntegrityError::SizeMismatch { expected: self.expected.size, actual: self.seen });
+            return Err(IntegrityError::SizeMismatch {
+                expected: self.expected.size,
+                actual: self.seen,
+            });
         }
         let digest: [u8; 32] = self.hasher.finalize().into();
-        if Sha256::from_bytes(digest) == self.expected.hash { Ok(()) } else { Err(IntegrityError::HashMismatch) }
+        if Sha256::from_bytes(digest) == self.expected.hash {
+            Ok(())
+        } else {
+            Err(IntegrityError::HashMismatch)
+        }
     }
 }

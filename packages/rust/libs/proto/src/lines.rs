@@ -30,8 +30,16 @@ impl<'a> Fields<'a> {
 /// Splits one line into key and value. `Key:` alone has an empty value.
 fn split_line(line: &str) -> Option<(&str, &str)> {
     let (key, rest) = line.split_once(':')?;
-    let value = if rest.is_empty() { rest } else { rest.strip_prefix(' ')? };
-    if key.is_empty() { None } else { Some((key, value)) }
+    let value = if rest.is_empty() {
+        rest
+    } else {
+        rest.strip_prefix(' ')?
+    };
+    if key.is_empty() {
+        None
+    } else {
+        Some((key, value))
+    }
 }
 
 /// Collects fields; `repeatable` names the single key that may repeat.

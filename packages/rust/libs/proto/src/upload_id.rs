@@ -31,7 +31,11 @@ impl UploadId {
     pub fn parse(text: &str) -> Result<Self, UploadIdError> {
         let uuid = Uuid::try_parse(text).map_err(|_| UploadIdError::Invalid)?;
         let canonical = uuid.hyphenated().to_string() == text;
-        if canonical && uuid.get_version_num() == 7 { Ok(Self(uuid)) } else { Err(UploadIdError::Invalid) }
+        if canonical && uuid.get_version_num() == 7 {
+            Ok(Self(uuid))
+        } else {
+            Err(UploadIdError::Invalid)
+        }
     }
 }
 

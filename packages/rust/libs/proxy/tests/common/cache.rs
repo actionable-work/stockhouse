@@ -12,7 +12,10 @@ fn signing_key(seed: u8) -> SigningKey {
 pub fn key_text(name: &str, seed: u8) -> String {
     use base64::Engine;
     let bytes = signing_key(seed).verifying_key().to_bytes();
-    format!("{name}:{}", base64::engine::general_purpose::STANDARD.encode(bytes))
+    format!(
+        "{name}:{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    )
 }
 
 pub fn fixture_key() -> PublicKey {
@@ -48,14 +51,23 @@ impl Entry {
         let hash = hash_for(label);
         let digest = Sha256::digest(nar);
         let nar_url = format!("nar/{hash}.nar");
-        let file = if file_hash { format!("FileHash: {digest}\nFileSize: {}\n", nar.len()) } else { String::new() };
+        let file = if file_hash {
+            format!("FileHash: {digest}\nFileSize: {}\n", nar.len())
+        } else {
+            String::new()
+        };
         let text = format!(
             "StorePath: /nix/store/{hash}-{label}\nURL: {nar_url}\nCompression: {compression}\n{file}\
 NarHash: {digest}\nNarSize: {}\nReferences: \n",
             nar.len()
         );
         let mut info = NarInfo::parse(text.as_bytes()).unwrap();
-        let entry = Entry { hash, nar_url, nar: nar.to_vec(), info: info.clone() };
+        let entry = Entry {
+            hash,
+            nar_url,
+            nar: nar.to_vec(),
+            info: info.clone(),
+        };
         info.signatures.push(sign(&info, KEY_NAME, seed));
         Entry { info, ..entry }
     }

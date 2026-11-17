@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 use stockhouse_proxy::{LogSink, ProxyConfig};
 
 pub use cache::*;
+#[allow(unused_imports)]
 pub use http::*;
 
 pub fn temp_dir() -> PathBuf {
@@ -34,16 +35,37 @@ impl Proxy {
         let logs = Arc::new(Mutex::new(Vec::new()));
         let captured = logs.clone();
         let sink: LogSink = Arc::new(move |line| captured.lock().unwrap().push(line.to_owned()));
-        let server = stockhouse_proxy::bind(&config, sink).await.expect("proxy binds");
+        let server = stockhouse_proxy::bind(&config, sink)
+            .await
+            .expect("proxy binds");
         let base = format!("http://{}", server.local_addr());
         tokio::spawn(server.run());
-        Proxy { base, logs, client: reqwest::Client::new() }
+        Proxy {
+            base,
+            logs,
+            client: reqwest::Client::builder()
+                .tls_certs_only(std::iter::empty::<reqwest::Certificate>())
+                .build()
+                .expect("cleartext test client"),
+        }
     }
 
     pub async fn get(&self, path: &str) -> (u16, Vec<u8>) {
-        let response = self.client.get(format!("{}{path}", self.base)).send().await.unwrap();
+        let response = self
+            .client
+            .get(format!("{}{path}", self.base))
+            .send()
+            .await
+            .unwrap();
         let status = response.status().as_u16();
-        (status, response.bytes().await.map(|b| b.to_vec()).unwrap_or_default())
+        (
+            status,
+            response
+                .bytes()
+                .await
+                .map(|b| b.to_vec())
+                .unwrap_or_default(),
+        )
     }
 
     pub async fn status(&self, path: &str) -> u16 {
@@ -66,5 +88,8 @@ pub fn config(tiers: &[(&str, String)]) -> String {
 
 /// A tier table with the fixture key trusted.
 pub fn tier(url: &str, extra: &str) -> String {
-    format!("url = \"{url}\"\ntrusted_keys = [\"{}\"]\n{extra}", fixture_key().to_string())
+    format!(
+        "url = \"{url}\"\ntrusted_keys = [\"{}\"]\n{extra}",
+        fixture_key()
+    )
 }

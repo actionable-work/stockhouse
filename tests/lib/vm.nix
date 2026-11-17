@@ -1,0 +1,168 @@
+# Shared NixOS VM fixture for the client qualification stories. Each story
+# runs once per pinned Nix version, used as both client and daemon. The VM
+# has no network. Its signing key is a synthetic fixture: the secret is
+# assembled at runtime from a public constant seed and is trusted only inside
+# this VM.
+{
+  pkgs,
+  module,
+}: let
+  inherit (pkgs) lib;
+  keyName = "stockhouse-vm-fixture-1";
+  publicKey = "UpT9w0BGYiXPBfpdNiWwBf1b3LAwvtjoUHLlbFaOM3E=";
+  # sha256("stockhouse-vm-fixture-key-v1"); public, synthetic, test-only.
+  seed = "aa6ee2469379313f381ccfc5e7767b0911677391d44edcecbead9d28e51094ac";
+  deniedHash = "00000000000000000000000000000403";
+  failingHash = "00000000000000000000000000000500";
+
+  sharedFixture = pkgs.writeText "stockhouse-shared-fixture.py" ''
+    import http.server
+
+    LOG = "/var/lib/stockhouse-vm/shared-requests.log"
+    REPLIES = {"/nix-cache-info": 200, "/${deniedHash}.narinfo": 403, "/${failingHash}.narinfo": 500}
+
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            with open(LOG, "a") as log:
+                log.write(f"{self.path} {self.headers.get('Authorization', '-')}\n")
+            code = REPLIES.get(self.path, 404)
+            body = b"StoreDir: /nix/store\n" if code == 200 else b""
+            self.send_response(code)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+
+    http.server.HTTPServer(("127.0.0.1", 8485), Handler).serve_forever()
+  '';
+
+  node = nixPackage: {config, ...}: {
+    imports = [module];
+    nix.package = nixPackage;
+    nix.settings.secret-key-files = ["/etc/stockhouse-vm/key.sec"];
+    # Builds query the proxy before building; do not cache those misses.
+    nix.settings.narinfo-cache-negative-ttl = 0;
+    # Keep built paths across reboots.
+    virtualisation.writableStoreUseTmpfs = false;
+    virtualisation.memorySize = 2048;
+    environment.systemPackages = [config.services.stockhouse.package pkgs.curl];
+
+    systemd.services.stockhouse-vm-token = {
+      requiredBy = ["stockhouse-proxy.service"];
+      before = ["stockhouse-proxy.service"];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+      script = ''
+        install -d -m 0700 /var/lib/stockhouse-vm
+        if [ ! -f /var/lib/stockhouse-vm/shared-token ]; then
+          (umask 077; head -c 24 /dev/urandom | ${pkgs.coreutils}/bin/base64 | tr -d '/+=\n' > /var/lib/stockhouse-vm/shared-token)
+        fi
+      '';
+    };
+    systemd.services.stockhouse-vm-shared = {
+      wantedBy = ["multi-user.target"];
+      after = ["stockhouse-vm-token.service"];
+      requires = ["stockhouse-vm-token.service"];
+      serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 ${sharedFixture}";
+    };
+
+    services.stockhouse = {
+      proxy = {
+        enable = true;
+        private = {
+          url = "file:///var/lib/stockhouse/private-cache/";
+          trustedKeys = ["${keyName}:${publicKey}"];
+        };
+        shared = {
+          url = "http://127.0.0.1:8485/";
+          trustedKeys = ["${keyName}:${publicKey}"];
+          credentialFile = "/var/lib/stockhouse-vm/shared-token";
+        };
+      };
+      uploader = {
+        enable = true;
+        backend = "nix-copy";
+        nixCopyDestination = "file:///var/lib/stockhouse/private-cache";
+        maxPending = 3;
+        pollInterval = 1;
+      };
+    };
+    specialisation.upgraded.configuration.services.stockhouse.proxy.priority = lib.mkForce 45;
+  };
+
+  # Helpers and boot steps shared by every story.
+  prelude = ''
+    import base64
+    import json
+
+    QUEUE = "/var/lib/stockhouse/queue"
+    CACHE = "/var/lib/stockhouse/private-cache"
+    PROXY = "http://127.0.0.1:8484"
+    KEY_NAME = "${keyName}"
+    DENIED_HASH = "${deniedHash}"
+    FAILING_HASH = "${failingHash}"
+    secret = base64.b64encode(bytes.fromhex("${seed}") + base64.b64decode("${publicKey}")).decode()
+
+
+    def http_code(path):
+        return machine.succeed(f"curl -s -o /dev/null -w '%{{http_code}}' {PROXY}{path}").strip()
+
+
+    def build(tag):
+        expr = f'derivation {{ name = "vm-{tag}"; system = builtins.currentSystem; builder = "/bin/sh"; args = [ "-c" "echo {tag} > $out" ]; }}'
+        return machine.succeed(f"nix-build --no-out-link -E '{expr}'").strip()
+
+
+    def store_hash(path):
+        return path.split("/")[-1][:32]
+
+
+    def status():
+        return json.loads(machine.succeed(f"stockhouse status --queue {QUEUE}"))
+
+
+    def wait_uploaded(path):
+        machine.wait_until_succeeds(f"test -f {QUEUE}/done/{store_hash(path)}.json", timeout=120)
+
+
+    def wait_drained():
+        machine.wait_until_succeeds(f"test $(ls {QUEUE}/pending | wc -l) -eq 0", timeout=120)
+
+
+    machine.start()
+    machine.wait_for_unit("multi-user.target")
+    machine.succeed("install -d -m 0755 /etc/stockhouse-vm")
+    machine.succeed(f"(umask 077; printf '%s' '{KEY_NAME}:{secret}' > /etc/stockhouse-vm/key.sec)")
+    machine.succeed(f"install -d -o stockhouse -g stockhouse -m 0755 {CACHE}")
+    machine.succeed(f"printf 'StoreDir: /nix/store\\n' > {CACHE}/nix-cache-info && chown stockhouse:stockhouse {CACHE}/nix-cache-info")
+    machine.systemctl("restart nix-daemon")
+    machine.wait_for_unit("stockhouse-proxy.service")
+    machine.wait_for_unit("stockhouse-uploader.service")
+    machine.wait_for_open_port(8484)
+  '';
+
+  nixVersions = {
+    "nix-2_34" = pkgs.nixVersions.nix_2_34;
+    "nix-2_31" = pkgs.nixVersions.nix_2_31;
+  };
+in {
+  # One check per pinned Nix version: `vm-<story>-<nix version>`.
+  story = story: {
+    script,
+    passthru,
+  }:
+    lib.mapAttrs' (version: nixPackage:
+      lib.nameValuePair "vm-${story}-${version}" (pkgs.testers.runNixOSTest {
+        name = "stockhouse-vm-${story}-${version}";
+        nodes.machine = node nixPackage;
+        testScript = prelude + script;
+        inherit passthru;
+      }))
+    nixVersions;
+}

@@ -44,15 +44,25 @@ impl fmt::Display for UsageError {
 
 fn flag_name(arg: &str) -> String {
     let name = arg.split('=').next().unwrap_or_default();
-    if name.starts_with("--") { name.to_owned() } else { "<positional>".to_owned() }
+    if name.starts_with("--") {
+        name.to_owned()
+    } else {
+        "<positional>".to_owned()
+    }
 }
 
-fn flags(rest: &[String], value_flag: &'static str, allow_once: bool) -> Result<(PathBuf, bool), UsageError> {
+fn flags(
+    rest: &[String],
+    value_flag: &'static str,
+    allow_once: bool,
+) -> Result<(PathBuf, bool), UsageError> {
     let (mut value, mut once) = (None, false);
     let mut iter = rest.iter();
     while let Some(arg) = iter.next() {
         if arg == value_flag && value.is_none() {
-            value = Some(PathBuf::from(iter.next().ok_or(UsageError::MissingValue(value_flag))?));
+            value = Some(PathBuf::from(
+                iter.next().ok_or(UsageError::MissingValue(value_flag))?,
+            ));
         } else if allow_once && arg == "--once" && !once {
             once = true;
         } else {
@@ -70,13 +80,19 @@ pub fn parse(args: &[String]) -> Result<Parsed, UsageError> {
         None => Ok(parsed),
     };
     match command.as_str() {
-        "proxy" => Ok(Parsed::Proxy { config: flags(rest, "--config", false)?.0 }),
+        "proxy" => Ok(Parsed::Proxy {
+            config: flags(rest, "--config", false)?.0,
+        }),
         "uploader" => {
             let (config, once) = flags(rest, "--config", true)?;
             Ok(Parsed::Uploader { config, once })
         }
-        "post-build-hook" => Ok(Parsed::Hook { queue: flags(rest, "--queue", false)?.0 }),
-        "status" => Ok(Parsed::Status { queue: flags(rest, "--queue", false)?.0 }),
+        "post-build-hook" => Ok(Parsed::Hook {
+            queue: flags(rest, "--queue", false)?.0,
+        }),
+        "status" => Ok(Parsed::Status {
+            queue: flags(rest, "--queue", false)?.0,
+        }),
         "login" => no_flags(Parsed::Grant("login")),
         "logout" => no_flags(Parsed::Grant("logout")),
         "refresh" => no_flags(Parsed::Grant("refresh")),

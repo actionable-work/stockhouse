@@ -16,7 +16,10 @@ pub fn digit(c: u8) -> Option<u8> {
 /// Encodes bytes the way Nix does: the last character holds bits 0..5.
 pub fn encode(bytes: &[u8]) -> String {
     let len = encoded_len(bytes.len());
-    (0..len).rev().map(|n| ALPHABET[group(bytes, n * 5) as usize] as char).collect()
+    (0..len)
+        .rev()
+        .map(|n| ALPHABET[group(bytes, n * 5) as usize] as char)
+        .collect()
 }
 
 fn group(bytes: &[u8], bit: usize) -> u8 {

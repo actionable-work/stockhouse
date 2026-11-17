@@ -11,7 +11,9 @@ pub(crate) type ByteStream = BoxStream<'static, Result<Bytes, std::io::Error>>;
 pub(crate) type Body = UnsyncBoxBody<Bytes, std::io::Error>;
 
 pub(crate) fn full(data: impl Into<Bytes>) -> Body {
-    Full::new(data.into()).map_err(|never| match never {}).boxed_unsync()
+    Full::new(data.into())
+        .map_err(|never| match never {})
+        .boxed_unsync()
 }
 
 pub(crate) fn empty() -> Body {

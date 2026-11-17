@@ -38,7 +38,15 @@ impl Record {
     /// A fresh record with a new identity.
     pub fn new(store_path: StorePath, now: u64) -> Self {
         let id = UploadId::generate();
-        Self { id, store_path, enqueued_at: now, attempts: 0, next_attempt_at: now, last_error: None, reason: None }
+        Self {
+            id,
+            store_path,
+            enqueued_at: now,
+            attempts: 0,
+            next_attempt_at: now,
+            last_error: None,
+            reason: None,
+        }
     }
 
     /// Parses version 1 JSON; anything else is `None` (corrupt).

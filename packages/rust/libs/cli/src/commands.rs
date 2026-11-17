@@ -6,18 +6,27 @@ use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use stockhouse_credentials::{DeferredGrantFlow, GrantFlow};
 use stockhouse_ingest::{
-    BackendConfig, DeferredUploader, NixCopyUploader, NixPathInfoScanner, NoScanner, Queue, ScannerConfig, Scanner,
-    UploaderConfig, Uploader, Worker, hook,
+    BackendConfig, DeferredUploader, NixCopyUploader, NixPathInfoScanner, NoScanner, Queue,
+    Scanner, ScannerConfig, Uploader, UploaderConfig, Worker, hook,
 };
 use stockhouse_proto::PROTOCOL_VERSION;
 use stockhouse_proxy::ProxyConfig;
 
 const EXIT_FAILURE: u8 = 1;
 
-pub(crate) fn dispatch(parsed: Parsed, env: &dyn Fn(&str) -> Option<String>, out: &mut dyn Write, err: &mut dyn Write) -> u8 {
+pub(crate) fn dispatch(
+    parsed: Parsed,
+    env: &dyn Fn(&str) -> Option<String>,
+    out: &mut dyn Write,
+    err: &mut dyn Write,
+) -> u8 {
     match parsed {
         Parsed::Version => {
-            let _ = writeln!(out, "stockhouse {} (protocol {PROTOCOL_VERSION})", env!("CARGO_PKG_VERSION"));
+            let _ = writeln!(
+                out,
+                "stockhouse {} (protocol {PROTOCOL_VERSION})",
+                env!("CARGO_PKG_VERSION")
+            );
             0
         }
         Parsed::Grant(command) => grant(command, err),
@@ -40,7 +49,9 @@ pub fn guard_hook<F: FnOnce() + UnwindSafe>(work: F) -> u8 {
 }
 
 fn now() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 fn grant(command: &str, err: &mut dyn Write) -> u8 {
@@ -62,7 +73,11 @@ fn grant(command: &str, err: &mut dyn Write) -> u8 {
 fn status(queue: &Path, out: &mut dyn Write, err: &mut dyn Write) -> u8 {
     match Queue::open(queue).and_then(|q| q.status()) {
         Ok(status) => {
-            let _ = writeln!(out, "{}", serde_json::to_string(&status).expect("status serializes"));
+            let _ = writeln!(
+                out,
+                "{}",
+                serde_json::to_string(&status).expect("status serializes")
+            );
             0
         }
         Err(error) => {
@@ -76,14 +91,20 @@ fn read_config(path: &Path, err: &mut dyn Write) -> Option<String> {
     match std::fs::read_to_string(path) {
         Ok(text) => Some(text),
         Err(error) => {
-            let _ = writeln!(err, "stockhouse: cannot read configuration {}: {error}", path.display());
+            let _ = writeln!(
+                err,
+                "stockhouse: cannot read configuration {}: {error}",
+                path.display()
+            );
             None
         }
     }
 }
 
 fn proxy(path: &Path, err: &mut dyn Write) -> u8 {
-    let Some(text) = read_config(path, err) else { return EXIT_USAGE };
+    let Some(text) = read_config(path, err) else {
+        return EXIT_USAGE;
+    };
     let config = match ProxyConfig::parse(&text) {
         Ok(config) => config,
         Err(error) => {
@@ -91,7 +112,10 @@ fn proxy(path: &Path, err: &mut dyn Write) -> u8 {
             return EXIT_USAGE;
         }
     };
-    let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().expect("tokio runtime starts");
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("tokio runtime starts");
     runtime.block_on(async {
         match stockhouse_proxy::bind(&config, stockhouse_proxy::stderr_log()).await {
             Ok(server) => {
@@ -109,7 +133,9 @@ fn proxy(path: &Path, err: &mut dyn Write) -> u8 {
 fn backend(config: &BackendConfig) -> Box<dyn Uploader> {
     match config {
         BackendConfig::Deferred => Box::new(DeferredUploader),
-        BackendConfig::NixCopy { destination, nix } => Box::new(NixCopyUploader::new(nix.clone(), destination.clone())),
+        BackendConfig::NixCopy { destination, nix } => {
+            Box::new(NixCopyUploader::new(nix.clone(), destination.clone()))
+        }
     }
 }
 
@@ -121,7 +147,9 @@ fn scanner(config: &ScannerConfig) -> Box<dyn Scanner> {
 }
 
 fn uploader(path: &Path, once: bool, err: &mut dyn Write) -> u8 {
-    let Some(text) = read_config(path, err) else { return EXIT_USAGE };
+    let Some(text) = read_config(path, err) else {
+        return EXIT_USAGE;
+    };
     let config = match UploaderConfig::parse(&text) {
         Ok(config) => config,
         Err(error) => {

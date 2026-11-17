@@ -9,8 +9,12 @@ const URL_CHARS: &[u8] = b"+-._/~=";
 
 /// A relative URL: allowed characters only, no empty, `.` or `..` segment.
 pub(crate) fn url(text: &str) -> Option<String> {
-    let chars_ok = text.bytes().all(|c| c.is_ascii_alphanumeric() || URL_CHARS.contains(&c));
-    let segments_ok = text.split('/').all(|s| !s.is_empty() && s != "." && s != "..");
+    let chars_ok = text
+        .bytes()
+        .all(|c| c.is_ascii_alphanumeric() || URL_CHARS.contains(&c));
+    let segments_ok = text
+        .split('/')
+        .all(|s| !s.is_empty() && s != "." && s != "..");
     (chars_ok && segments_ok).then(|| text.to_owned())
 }
 
@@ -45,7 +49,11 @@ pub(crate) fn plain_text(text: &str) -> Option<String> {
 }
 
 pub(crate) fn render_references(references: &[StorePath]) -> String {
-    references.iter().map(StorePath::basename).collect::<Vec<_>>().join(" ")
+    references
+        .iter()
+        .map(StorePath::basename)
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 pub(crate) fn render_deriver(deriver: &Deriver) -> String {

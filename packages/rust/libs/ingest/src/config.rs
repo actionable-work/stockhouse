@@ -25,9 +25,13 @@ impl fmt::Display for UploaderConfigError {
         match self {
             Self::Parse(m) => write!(f, "uploader configuration: {m}"),
             Self::UnsupportedVersion(v) => write!(f, "uploader configuration: {v}"),
-            Self::RelativeQueueDir => f.write_str("uploader configuration: queue_dir must be absolute"),
+            Self::RelativeQueueDir => {
+                f.write_str("uploader configuration: queue_dir must be absolute")
+            }
             Self::InvalidLimit(field) => write!(f, "uploader configuration: invalid {field}"),
-            Self::UnsupportedDestination => f.write_str("uploader configuration: nix-copy needs an absolute file:// destination"),
+            Self::UnsupportedDestination => f.write_str(
+                "uploader configuration: nix-copy needs an absolute file:// destination",
+            ),
         }
     }
 }
@@ -99,14 +103,17 @@ pub struct UploaderConfig {
 impl UploaderConfig {
     /// Parses and validates TOML configuration.
     pub fn parse(text: &str) -> Result<Self, UploaderConfigError> {
-        let config: Self = toml::from_str(text).map_err(|e| UploaderConfigError::Parse(e.message().to_owned()))?;
+        let config: Self =
+            toml::from_str(text).map_err(|e| UploaderConfigError::Parse(e.message().to_owned()))?;
         check_version(config.version).map_err(UploaderConfigError::UnsupportedVersion)?;
         if !config.queue_dir.is_absolute() {
             return Err(UploaderConfigError::RelativeQueueDir);
         }
         config.check_limits()?;
         if let BackendConfig::NixCopy { destination, .. } = &config.backend {
-            let absolute = destination.strip_prefix("file://").is_some_and(|p| p.starts_with('/'));
+            let absolute = destination
+                .strip_prefix("file://")
+                .is_some_and(|p| p.starts_with('/'));
             if !absolute {
                 return Err(UploaderConfigError::UnsupportedDestination);
             }
@@ -120,7 +127,10 @@ impl UploaderConfig {
             ("max_attempts", self.max_attempts == 0),
             ("batch_size", self.batch_size == 0),
             ("backoff_base_secs", self.backoff_base_secs == 0),
-            ("backoff_max_secs", self.backoff_base_secs > self.backoff_max_secs),
+            (
+                "backoff_max_secs",
+                self.backoff_base_secs > self.backoff_max_secs,
+            ),
             ("poll_interval_secs", self.poll_interval_secs == 0),
             ("rescan_interval_secs", self.rescan_interval_secs == 0),
         ];

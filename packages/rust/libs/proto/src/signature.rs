@@ -57,7 +57,9 @@ impl fmt::Display for SignatureError {
         match self {
             Self::Unsigned => f.write_str("narinfo is unsigned"),
             Self::UntrustedSigner => f.write_str("narinfo has no signature from a trusted key"),
-            Self::InvalidSignature { key } => write!(f, "invalid signature from trusted key {key:?}"),
+            Self::InvalidSignature { key } => {
+                write!(f, "invalid signature from trusted key {key:?}")
+            }
         }
     }
 }
@@ -69,7 +71,9 @@ fn split_named<const N: usize>(text: &str) -> Result<(String, [u8; N]), KeyError
     if name.is_empty() || name.chars().any(char::is_whitespace) {
         return Err(KeyError::InvalidName);
     }
-    let bytes = STANDARD.decode(payload).map_err(|_| KeyError::InvalidBase64)?;
+    let bytes = STANDARD
+        .decode(payload)
+        .map_err(|_| KeyError::InvalidBase64)?;
     let bytes = <[u8; N]>::try_from(bytes).map_err(|_| KeyError::InvalidLength)?;
     Ok((name.to_owned(), bytes))
 }
@@ -122,7 +126,10 @@ impl Signature {
 
     /// Builds a signature from parts.
     pub fn from_parts(name: &str, bytes: [u8; 64]) -> Self {
-        Self { name: name.to_owned(), bytes }
+        Self {
+            name: name.to_owned(),
+            bytes,
+        }
     }
 
     /// The signing key name.
@@ -179,9 +186,13 @@ impl TrustedKeys {
         let message = narinfo.fingerprint();
         let mut verified = None;
         for sig in &narinfo.signatures {
-            let Some(key) = self.keys.iter().find(|k| k.name == sig.name) else { continue };
+            let Some(key) = self.keys.iter().find(|k| k.name == sig.name) else {
+                continue;
+            };
             if !key.verifies(message.as_bytes(), sig) {
-                return Err(SignatureError::InvalidSignature { key: key.name.clone() });
+                return Err(SignatureError::InvalidSignature {
+                    key: key.name.clone(),
+                });
             }
             verified.get_or_insert_with(|| key.name.clone());
         }
@@ -190,5 +201,9 @@ impl TrustedKeys {
 }
 
 fn unverified(narinfo: &NarInfo) -> SignatureError {
-    if narinfo.signatures.is_empty() { SignatureError::Unsigned } else { SignatureError::UntrustedSigner }
+    if narinfo.signatures.is_empty() {
+        SignatureError::Unsigned
+    } else {
+        SignatureError::UntrustedSigner
+    }
 }

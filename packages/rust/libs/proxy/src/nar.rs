@@ -21,7 +21,11 @@ enum Step {
 
 /// Wraps an upstream stream with a consistency check.
 pub(crate) fn verified(upstream: ByteStream, expected: ServedIntegrity) -> ByteStream {
-    let state = State { upstream, verifier: Some(ContentVerifier::new(expected)), held: None };
+    let state = State {
+        upstream,
+        verifier: Some(ContentVerifier::new(expected)),
+        held: None,
+    };
     futures_util::stream::unfold(state, |mut state| async move {
         match next(&mut state).await {
             Step::Emit(bytes) => Some((Ok(bytes), state)),
@@ -38,7 +42,9 @@ pub(crate) fn verified(upstream: ByteStream, expected: ServedIntegrity) -> ByteS
 
 async fn next(state: &mut State) -> Step {
     loop {
-        let Some(verifier) = state.verifier.as_mut() else { return Step::Done };
+        let Some(verifier) = state.verifier.as_mut() else {
+            return Step::Done;
+        };
         match state.upstream.next().await {
             Some(Ok(chunk)) if chunk.is_empty() => continue,
             Some(Ok(chunk)) => {
@@ -56,7 +62,10 @@ async fn next(state: &mut State) -> Step {
 }
 
 fn finish(state: &mut State) -> Step {
-    let verifier = state.verifier.take().expect("verifier present while streaming");
+    let verifier = state
+        .verifier
+        .take()
+        .expect("verifier present while streaming");
     match (verifier.finish(), state.held.take()) {
         (Err(e), _) => Step::Fail(io::Error::other(e)),
         (Ok(()), Some(last)) => Step::Emit(last),

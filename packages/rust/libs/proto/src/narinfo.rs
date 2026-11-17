@@ -89,7 +89,14 @@ pub enum Compression {
 }
 
 impl Compression {
-    const ALL: [Self; 6] = [Self::None, Self::Xz, Self::Bzip2, Self::Zstd, Self::Br, Self::Gzip];
+    const ALL: [Self; 6] = [
+        Self::None,
+        Self::Xz,
+        Self::Bzip2,
+        Self::Zstd,
+        Self::Br,
+        Self::Gzip,
+    ];
 
     /// The narinfo spelling.
     pub fn as_str(self) -> &'static str {
@@ -170,13 +177,17 @@ impl NarInfo {
     /// Returns a copy with only `URL` replaced.
     pub fn with_url(&self, url: &str) -> Result<Self, NarInfoError> {
         let url = field::url(url).ok_or(NarInfoError::InvalidField("URL"))?;
-        Ok(Self { url, ..self.clone() })
+        Ok(Self {
+            url,
+            ..self.clone()
+        })
     }
 
     /// Renders canonical narinfo text.
     pub fn render(&self) -> String {
         let mut out = String::new();
-        let mut line = |key: &str, value: &dyn fmt::Display| out.push_str(&format!("{key}: {value}\n"));
+        let mut line =
+            |key: &str, value: &dyn fmt::Display| out.push_str(&format!("{key}: {value}\n"));
         line("StorePath", &self.store_path);
         line("URL", &self.url);
         line("Compression", &self.compression.as_str());
@@ -197,19 +208,34 @@ impl NarInfo {
     }
 }
 
-fn required<T>(fields: &Fields<'_>, key: &'static str, parse: fn(&str) -> Option<T>) -> Result<T, NarInfoError> {
-    fields.get(key).and_then(parse).ok_or(NarInfoError::InvalidField(key))
+fn required<T>(
+    fields: &Fields<'_>,
+    key: &'static str,
+    parse: fn(&str) -> Option<T>,
+) -> Result<T, NarInfoError> {
+    fields
+        .get(key)
+        .and_then(parse)
+        .ok_or(NarInfoError::InvalidField(key))
 }
 
-fn optional<T>(fields: &Fields<'_>, key: &'static str, parse: fn(&str) -> Option<T>) -> Result<Option<T>, NarInfoError> {
-    fields.get(key).map(|v| parse(v).ok_or(NarInfoError::InvalidField(key))).transpose()
+fn optional<T>(
+    fields: &Fields<'_>,
+    key: &'static str,
+    parse: fn(&str) -> Option<T>,
+) -> Result<Option<T>, NarInfoError> {
+    fields
+        .get(key)
+        .map(|v| parse(v).ok_or(NarInfoError::InvalidField(key)))
+        .transpose()
 }
 
 fn build(fields: &Fields<'_>) -> Result<NarInfo, NarInfoError> {
     Ok(NarInfo {
         store_path: required(fields, "StorePath", |v| StorePath::parse(v).ok())?,
         url: required(fields, "URL", field::url)?,
-        compression: optional(fields, "Compression", Compression::parse)?.unwrap_or(Compression::Bzip2),
+        compression: optional(fields, "Compression", Compression::parse)?
+            .unwrap_or(Compression::Bzip2),
         file: file_info(fields)?,
         nar_hash: required(fields, "NarHash", |v| Sha256::parse(v).ok())?,
         nar_size: required(fields, "NarSize", field::nar_size)?,

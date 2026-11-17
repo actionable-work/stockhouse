@@ -10,7 +10,10 @@ fn nix32_round_trips_and_matches_nix() {
     let parsed = Sha256::parse(EMPTY_SHA256).unwrap();
     assert_eq!(parsed, Sha256::digest(b""));
     assert_eq!(parsed.to_string(), EMPTY_SHA256);
-    assert_eq!(nix32::encode(Sha256::digest(b"").bytes()), &EMPTY_SHA256[7..]);
+    assert_eq!(
+        nix32::encode(Sha256::digest(b"").bytes()),
+        &EMPTY_SHA256[7..]
+    );
 }
 
 #[cfg_attr(any(), bloomery("CLIENT-PROTO-HASH-002"))]
@@ -24,8 +27,17 @@ fn hex_parses_and_renders_as_nix32() {
 #[cfg_attr(any(), bloomery("CLIENT-PROTO-HASH-003"))]
 #[test]
 fn other_algorithms_are_rejected() {
-    for text in ["sha512:abc", "md5:abc", "sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=", ""] {
-        assert_eq!(Sha256::parse(text), Err(HashError::UnsupportedAlgorithm), "{text}");
+    for text in [
+        "sha512:abc",
+        "md5:abc",
+        "sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+        "",
+    ] {
+        assert_eq!(
+            Sha256::parse(text),
+            Err(HashError::UnsupportedAlgorithm),
+            "{text}"
+        );
     }
 }
 
@@ -37,6 +49,10 @@ fn bad_encodings_are_rejected() {
     // The leading character carries only 1 significant bit; 'z' sets unused bits.
     let non_canonical = format!("sha256:z{}", &EMPTY_SHA256[8..]);
     for text in ["sha256:abc".to_owned(), upper_hex, bad_char, non_canonical] {
-        assert_eq!(Sha256::parse(&text), Err(HashError::InvalidEncoding), "{text}");
+        assert_eq!(
+            Sha256::parse(&text),
+            Err(HashError::InvalidEncoding),
+            "{text}"
+        );
     }
 }

@@ -14,7 +14,11 @@ pub struct UnsupportedVersion {
 
 impl fmt::Display for UnsupportedVersion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "unsupported version {} (supported: {})", self.found, self.supported)
+        write!(
+            f,
+            "unsupported version {} (supported: {})",
+            self.found, self.supported
+        )
     }
 }
 
@@ -25,6 +29,9 @@ pub fn check_version(found: u32) -> Result<(), UnsupportedVersion> {
     if found == PROTOCOL_VERSION {
         Ok(())
     } else {
-        Err(UnsupportedVersion { found, supported: PROTOCOL_VERSION })
+        Err(UnsupportedVersion {
+            found,
+            supported: PROTOCOL_VERSION,
+        })
     }
 }

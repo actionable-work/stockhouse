@@ -3,8 +3,8 @@ use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use stockhouse_credentials::{
-    CredentialError, CredentialSource, CredentialSpec, DeferredGrantFlow, GrantError, GrantFlow, OwnerOnlyFile, Secret,
-    SystemdCredential, source,
+    CredentialError, CredentialSource, CredentialSpec, DeferredGrantFlow, GrantError, GrantFlow,
+    OwnerOnlyFile, Secret, SystemdCredential, source,
 };
 
 fn temp_dir() -> PathBuf {
@@ -22,13 +22,18 @@ fn write(path: &Path, content: &[u8], mode: u32) {
 }
 
 fn read(path: &Path) -> Result<Vec<u8>, CredentialError> {
-    OwnerOnlyFile::new(path.to_path_buf()).credential().map(|s| s.expose().to_vec())
+    OwnerOnlyFile::new(path.to_path_buf())
+        .credential()
+        .map(|s| s.expose().to_vec())
 }
 
 #[cfg_attr(any(), bloomery("CLIENT-CREDS-SOURCE-001"))]
 #[test]
 fn unconfigured_credentials_are_not_discovered() {
-    assert_eq!(source(None).credential().map(|_| ()), Err(CredentialError::NotConfigured));
+    assert_eq!(
+        source(None).credential().map(|_| ()),
+        Err(CredentialError::NotConfigured)
+    );
 }
 
 #[cfg_attr(any(), bloomery("CLIENT-CREDS-SOURCE-002"))]
@@ -54,17 +59,27 @@ fn systemd_credentials_skip_owner_and_mode_checks() {
     assert_eq!(link.credential().map(|_| ()), Err(CredentialError::Symlink));
     write(&dir.join("bad"), b"a b", 0o400);
     let bad = SystemdCredential::with_directory("bad".to_owned(), Some(dir));
-    assert_eq!(bad.credential().map(|_| ()), Err(CredentialError::Malformed));
+    assert_eq!(
+        bad.credential().map(|_| ()),
+        Err(CredentialError::Malformed)
+    );
 }
 
 #[cfg_attr(any(), bloomery("CLIENT-CREDS-SOURCE-005"))]
 #[test]
 fn systemd_credentials_need_directory_and_plain_name() {
     let unset = SystemdCredential::with_directory("x".to_owned(), None);
-    assert_eq!(unset.credential().map(|_| ()), Err(CredentialError::NotConfigured));
+    assert_eq!(
+        unset.credential().map(|_| ()),
+        Err(CredentialError::NotConfigured)
+    );
     for name in ["", ".", "..", "a/b"] {
         let src = SystemdCredential::with_directory(name.to_owned(), Some(temp_dir()));
-        assert_eq!(src.credential().map(|_| ()), Err(CredentialError::InvalidName), "{name:?}");
+        assert_eq!(
+            src.credential().map(|_| ()),
+            Err(CredentialError::InvalidName),
+            "{name:?}"
+        );
     }
 }
 
@@ -72,7 +87,9 @@ fn systemd_credentials_need_directory_and_plain_name() {
 #[test]
 fn grant_flow_is_deferred() {
     let flow = DeferredGrantFlow;
-    let expected = Err(GrantError::Unavailable { dependency: "P2.06" });
+    let expected = Err(GrantError::Unavailable {
+        dependency: "P2.06",
+    });
     assert_eq!(flow.login(), expected);
     assert_eq!(flow.logout(), expected);
     assert_eq!(flow.refresh(), expected);
@@ -92,9 +109,18 @@ fn owner_only_file_yields_content() {
 #[test]
 fn relative_and_store_paths_are_rejected() {
     assert_eq!(read(Path::new("token")), Err(CredentialError::RelativePath));
-    assert_eq!(read(Path::new("/run/../nix/store/x")), Err(CredentialError::RelativePath));
-    assert_eq!(read(Path::new("/run/./x")), Err(CredentialError::RelativePath));
-    assert_eq!(read(Path::new("/nix/store/abc-token")), Err(CredentialError::InStore));
+    assert_eq!(
+        read(Path::new("/run/../nix/store/x")),
+        Err(CredentialError::RelativePath)
+    );
+    assert_eq!(
+        read(Path::new("/run/./x")),
+        Err(CredentialError::RelativePath)
+    );
+    assert_eq!(
+        read(Path::new("/nix/store/abc-token")),
+        Err(CredentialError::InStore)
+    );
 }
 
 #[cfg_attr(any(), bloomery("CLIENT-CREDS-FILE-003"))]
@@ -120,7 +146,11 @@ fn open_permissions_are_rejected() {
     let path = temp_dir().join("token");
     for mode in [0o640, 0o604, 0o660] {
         write(&path, b"tok", mode);
-        assert_eq!(read(&path), Err(CredentialError::PermissionsTooOpen { mode }), "{mode:o}");
+        assert_eq!(
+            read(&path),
+            Err(CredentialError::PermissionsTooOpen { mode }),
+            "{mode:o}"
+        );
     }
 }
 
@@ -132,7 +162,10 @@ fn files_owned_by_another_user_are_rejected() {
     // SAFETY: geteuid has no preconditions.
     let other = unsafe { libc::geteuid() }.wrapping_add(1);
     let src = OwnerOnlyFile::with_euid(path, other);
-    assert_eq!(src.credential().map(|_| ()), Err(CredentialError::WrongOwner));
+    assert_eq!(
+        src.credential().map(|_| ()),
+        Err(CredentialError::WrongOwner)
+    );
 }
 
 #[cfg_attr(any(), bloomery("CLIENT-CREDS-FILE-007"))]

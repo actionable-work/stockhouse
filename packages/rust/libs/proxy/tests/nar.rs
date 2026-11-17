@@ -23,9 +23,18 @@ fn big_nar() -> Vec<u8> {
 
 /// Reads a full body, reporting whether the transfer completed.
 async fn fetch(proxy: &Proxy, path: &str) -> (u16, Option<u64>, Result<Vec<u8>, ()>) {
-    let response = proxy.client.get(format!("{}{path}", proxy.base)).send().await.unwrap();
+    let response = proxy
+        .client
+        .get(format!("{}{path}", proxy.base))
+        .send()
+        .await
+        .unwrap();
     let (status, len) = (response.status().as_u16(), response.content_length());
-    (status, len, response.bytes().await.map(|b| b.to_vec()).map_err(|_| ()))
+    (
+        status,
+        len,
+        response.bytes().await.map(|b| b.to_vec()).map_err(|_| ()),
+    )
 }
 
 #[cfg_attr(any(), bloomery("CLIENT-PROXY-NAR-001"))]
@@ -34,14 +43,29 @@ async fn nar_routes_reverify_against_the_named_tier() {
     let s = setup().await;
     let entry = Entry::new("hello", b"nar bytes");
     s.private.add(&entry);
-    assert_eq!(fetch(&s.proxy, &route(&entry)).await.2, Ok(entry.nar.clone()));
+    assert_eq!(
+        fetch(&s.proxy, &route(&entry)).await.2,
+        Ok(entry.nar.clone())
+    );
     let paths: Vec<_> = s.private.seen().into_iter().map(|r| r.path).collect();
-    assert_eq!(paths, [format!("/{}", entry.narinfo_path()), format!("/{}", entry.nar_url)]);
+    assert_eq!(
+        paths,
+        [
+            format!("/{}", entry.narinfo_path()),
+            format!("/{}", entry.nar_url)
+        ]
+    );
     let s = setup().await;
     let unsigned = Entry::new("hello", b"nar bytes").unsigned();
     s.private.add(&unsigned);
     assert_eq!(fetch(&s.proxy, &route(&unsigned)).await.0, 502);
-    assert!(s.private.seen().iter().all(|r| r.path.ends_with(".narinfo")), "no NAR bytes fetched");
+    assert!(
+        s.private
+            .seen()
+            .iter()
+            .all(|r| r.path.ends_with(".narinfo")),
+        "no NAR bytes fetched"
+    );
 }
 
 #[cfg_attr(any(), bloomery("CLIENT-PROXY-NAR-002"))]
@@ -52,8 +76,18 @@ async fn nar_urls_must_match_the_narinfo() {
     s.private.add(&entry);
     let path = format!("/nar/private/{}/nar/other.nar", entry.hash);
     assert_eq!(fetch(&s.proxy, &path).await.0, 502);
-    assert!(s.proxy.log_lines().iter().any(|l| l.ends_with("narinfo-changed")));
-    assert!(s.private.seen().iter().all(|r| r.path.ends_with(".narinfo")));
+    assert!(
+        s.proxy
+            .log_lines()
+            .iter()
+            .any(|l| l.ends_with("narinfo-changed"))
+    );
+    assert!(
+        s.private
+            .seen()
+            .iter()
+            .all(|r| r.path.ends_with(".narinfo"))
+    );
 }
 
 #[cfg_attr(any(), bloomery("CLIENT-PROXY-NAR-003"))]
@@ -61,7 +95,11 @@ async fn nar_urls_must_match_the_narinfo() {
 async fn unconfigured_or_invalid_routes_are_404() {
     let s = setup().await;
     let hash = hash_for("x");
-    for path in [format!("/nar/public/{hash}/nar/x.nar"), "/nar/private/bad/nar/x.nar".to_owned(), format!("/nar/vault/{hash}/x")] {
+    for path in [
+        format!("/nar/public/{hash}/nar/x.nar"),
+        "/nar/private/bad/nar/x.nar".to_owned(),
+        format!("/nar/vault/{hash}/x"),
+    ] {
         assert_eq!(fetch(&s.proxy, &path).await.0, 404, "{path}");
     }
     assert!(s.private.seen_all().is_empty());
@@ -71,7 +109,10 @@ async fn unconfigured_or_invalid_routes_are_404() {
 #[tokio::test]
 async fn verified_nar_bytes_stream_completely() {
     let s = setup().await;
-    for entry in [Entry::new("big", &big_nar()), Entry::compressed("packed", &big_nar(), true)] {
+    for entry in [
+        Entry::new("big", &big_nar()),
+        Entry::compressed("packed", &big_nar(), true),
+    ] {
         s.private.add(&entry);
         let (status, len, body) = fetch(&s.proxy, &route(&entry)).await;
         assert_eq!((status, len), (200, Some(entry.nar.len() as u64)));
@@ -114,11 +155,19 @@ async fn altered_nar_bytes_never_complete() {
 async fn missing_nar_is_an_error() {
     let s = setup().await;
     let entry = Entry::new("gone", b"nar");
-    s.private.set(&entry.narinfo_path(), Reply::ok(entry.narinfo_text()));
+    s.private
+        .set(&entry.narinfo_path(), Reply::ok(entry.narinfo_text()));
     assert_eq!(fetch(&s.proxy, &route(&entry)).await.0, 502);
     let vanished = Entry::new("vanished", b"nar");
     assert_eq!(fetch(&s.proxy, &route(&vanished)).await.0, 502);
-    assert_eq!(s.proxy.log_lines().iter().filter(|l| l.ends_with("nar-missing")).count(), 2);
+    assert_eq!(
+        s.proxy
+            .log_lines()
+            .iter()
+            .filter(|l| l.ends_with("nar-missing"))
+            .count(),
+        2
+    );
 }
 
 #[cfg_attr(any(), bloomery("CLIENT-PROXY-NAR-007"))]
@@ -149,7 +198,14 @@ async fn range_requests_receive_the_full_representation() {
     let s = setup().await;
     let entry = Entry::new("hello", &big_nar());
     s.private.add(&entry);
-    let response = s.proxy.client.get(format!("{}{}", s.proxy.base, route(&entry))).header("range", "bytes=100-").send().await.unwrap();
+    let response = s
+        .proxy
+        .client
+        .get(format!("{}{}", s.proxy.base, route(&entry)))
+        .header("range", "bytes=100-")
+        .send()
+        .await
+        .unwrap();
     assert_eq!(response.status().as_u16(), 200);
     assert!(response.headers().get("accept-ranges").is_none());
     assert_eq!(response.bytes().await.unwrap().to_vec(), entry.nar);
