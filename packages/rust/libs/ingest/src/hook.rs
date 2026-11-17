@@ -98,7 +98,9 @@ pub fn run(dir: &Path, out_paths: &str, now: u64, log: &mut dyn Write) -> HookRe
             Ok(EnqueueOutcome::Overflow) => report.overflow += 1,
             Ok(_) => report.known += 1,
             Err(e) => {
+                // The queue is unusable; one line, not one per path.
                 let _ = writeln!(log, "stockhouse post-build-hook: {e}");
+                break;
             }
         }
     }

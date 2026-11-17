@@ -55,6 +55,9 @@ The flake exposes `x86_64-linux` only.
   upload path, and it signs nothing.
 - The VM signing key is a synthetic fixture derived from a public seed. It
   shows the mechanism only.
+- No per-user isolation on the host. Like any Nix substituter, the loopback
+  proxy serves private-tier narinfo and NARs, fetched with the machine's
+  credential, to every local process that can reach it.
 - No cache-side behavior (catalog, quotas, GC, signing) is exercised. No live
   network, provider or production evidence is claimed.
 - No release (crates.io or otherwise). All crates are `publish = false`.

@@ -93,7 +93,7 @@ impl<'a> Worker<'a> {
                 fsutil::remove(&path).map_err(io_err("remove reconciled"))?;
                 reconciled += 1;
             } else if let Some(Err(())) = self.queue.read_record(&path)? {
-                std::fs::rename(&path, self.queue.path("failed", &stem, ".corrupt"))
+                fsutil::rename(&path, &self.queue.path("failed", &stem, ".corrupt"))
                     .map_err(io_err("quarantine"))?;
                 quarantined += 1;
             }

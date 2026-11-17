@@ -157,6 +157,9 @@ without upstream contact. Any other path is 404 without upstream contact;
 methods other than `GET` and `HEAD` are 405 (`HEAD` is not accepted on NAR
 routes).
 
+A failed `accept` (for example `EMFILE`) waits 50 ms before the next attempt,
+so a persistent error never spins the accept loop.
+
 The proxy binds exactly the configured loopback address (`127.0.0.0/8` or
 `[::1]`). If the port is in
 use it fails with `ServeError::AddressInUse { addr }` and exits nonzero; it

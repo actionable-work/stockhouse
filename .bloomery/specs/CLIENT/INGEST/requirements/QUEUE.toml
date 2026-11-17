@@ -142,3 +142,14 @@ type = "event"
 trigger = "a pending record exists for a path that also has a done record"
 system = "queue"
 action = "remove the pending record without uploading it again"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-014"
+title = "Stale staging files never block writes"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a queue write finds its staging name in `tmp/` already taken by a file a crashed process left behind"
+system = "queue"
+action = "stage under the next free name, complete the write and leave the stale file untouched"

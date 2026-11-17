@@ -43,10 +43,10 @@
     {
       "manifest_path": "packages/rust/libs/ingest/Cargo.toml",
       "name": "stockhouse-ingest",
-      "overall_score": 99.68,
-      "sloc": 1214,
+      "overall_score": 99.69,
+      "sloc": 1239,
       "subscores": {
-        "complexity": 0.3,
+        "complexity": 0.29,
         "crateSize": 0.0,
         "duplication": 0.0,
         "nesting": 0.0,
@@ -70,7 +70,7 @@
       "manifest_path": "packages/rust/libs/proxy/Cargo.toml",
       "name": "stockhouse-proxy",
       "overall_score": 100.0,
-      "sloc": 1040,
+      "sloc": 1041,
       "subscores": {
         "complexity": 0.0,
         "crateSize": 0.0,
@@ -80,7 +80,7 @@
       }
     }
   ],
-  "input_digest": "a032498002f180fcb24b22374036dd53431f025c06e6a13b091524f21177ed3c",
+  "input_digest": "554adae25b407d194194e7e8bcc70146d3133642b6fee699b4850a0ff58cb858",
   "policy": {
     "scoring": {
       "crateSlocLimit": 1500,
@@ -106,7 +106,7 @@
   "workspace": {
     "crate_count": 6,
     "overall_score": 99.84,
-    "sloc": 4003,
+    "sloc": 4029,
     "subscores": {
       "complexity": 0.16,
       "crateSize": 0.0,

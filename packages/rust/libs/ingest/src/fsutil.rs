@@ -6,18 +6,35 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+/// Attempts at a free staging name before giving up.
+const STAGE_ATTEMPTS: usize = 64;
+
+/// Writes `bytes` to a fresh file in `tmp`. A name left by a crashed process
+/// with the same pid is skipped; a failed write removes its own file.
 fn stage(tmp: &Path, bytes: &[u8]) -> io::Result<std::path::PathBuf> {
     static NEXT: AtomicU64 = AtomicU64::new(0);
-    let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    let path = tmp.join(format!("{}-{n}.tmp", std::process::id()));
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .custom_flags(libc::O_NOFOLLOW)
-        .open(&path)?;
-    file.write_all(bytes)?;
-    file.sync_all()?;
-    Ok(path)
+    for _ in 0..STAGE_ATTEMPTS {
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let path = tmp.join(format!("{}-{n}.tmp", std::process::id()));
+        let opened = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(&path);
+        let mut file = match opened {
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            other => other?,
+        };
+        if let Err(e) = file.write_all(bytes).and_then(|()| file.sync_all()) {
+            let _ = fs::remove_file(&path);
+            return Err(e);
+        }
+        return Ok(path);
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "no free staging name",
+    ))
 }
 
 fn sync_dir(dir: &Path) -> io::Result<()> {
@@ -31,7 +48,10 @@ fn parent(path: &Path) -> &Path {
 /// Atomically replaces `target` with `bytes`.
 pub(crate) fn replace(tmp: &Path, target: &Path, bytes: &[u8]) -> io::Result<()> {
     let staged = stage(tmp, bytes)?;
-    fs::rename(&staged, target)?;
+    if let Err(e) = fs::rename(&staged, target) {
+        let _ = fs::remove_file(&staged);
+        return Err(e);
+    }
     sync_dir(parent(target))
 }
 
@@ -39,12 +59,19 @@ pub(crate) fn replace(tmp: &Path, target: &Path, bytes: &[u8]) -> io::Result<()>
 pub(crate) fn create_new(tmp: &Path, target: &Path, bytes: &[u8]) -> io::Result<bool> {
     let staged = stage(tmp, bytes)?;
     let linked = fs::hard_link(&staged, target);
-    fs::remove_file(&staged)?;
+    // A leftover staging file is harmless once the link decided the outcome.
+    let _ = fs::remove_file(&staged);
     match linked {
         Ok(()) => sync_dir(parent(target)).map(|()| true),
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(false),
         Err(e) => Err(e),
     }
+}
+
+/// Renames `from` to `to` and syncs the destination directory.
+pub(crate) fn rename(from: &Path, to: &Path) -> io::Result<()> {
+    fs::rename(from, to)?;
+    sync_dir(parent(to))
 }
 
 /// Removes a file and syncs its directory; a missing file is fine.

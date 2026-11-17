@@ -44,7 +44,10 @@ a future format change must ship its reader before its writer.
 Every record write stages a file in `tmp/`, `fsync`s it, moves it into place
 and `fsync`s the directory. A new pending record is placed with a hard link,
 which fails if the name exists, so concurrent hooks enqueueing the same path
-create exactly one record and the first identity wins.
+create exactly one record and the first identity wins. Staging names are
+`<pid>-<n>.tmp`; a name already taken (left by a crashed process whose pid
+was reused) is skipped for the next `n`, and a staging write that fails
+removes its own file. Leftover staging files are never read.
 
 ## Enqueue
 
@@ -82,7 +85,8 @@ that loop while it runs. `stockhouse post-build-hook --queue <dir>`:
    nothing more.
 3. Enqueues up to 1024 paths per invocation, counting `pending/` once, and
    records the rest as overflow. Entries that are not valid store paths are
-   skipped with a stderr line.
+   skipped with a stderr line. The first queue I/O error (an unwritable
+   queue shows up here) is logged once and stops the loop.
 4. Never contacts the uploader, the network or a server, and never waits for
    an upload.
 5. Exits 0 in every case. The CLI catches panics (`catch_unwind`; release

@@ -64,7 +64,13 @@ fn unusable_queues_never_fail_the_build() {
         base.join("v2"),
         base.join("ro"),
     ] {
-        let (report, log) = run(&dir, path("a").as_str());
+        let paths = format!(
+            "{} {} {}",
+            path("a").as_str(),
+            path("b").as_str(),
+            path("c").as_str()
+        );
+        let (report, log) = run(&dir, &paths);
         assert_eq!(report.queued, 0, "{dir:?}");
         assert_eq!(log.len(), 1, "{dir:?}: {log:?}");
     }

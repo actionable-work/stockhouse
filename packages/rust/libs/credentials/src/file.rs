@@ -130,7 +130,8 @@ fn check_owner(uid: u32, mode: u32, euid: u32) -> Result<(), CredentialError> {
 }
 
 fn read_content(file: File) -> Result<Secret, CredentialError> {
-    let mut bytes = Vec::new();
+    // Sized up front so growth never leaves an unzeroed copy behind.
+    let mut bytes = Vec::with_capacity(MAX_BYTES as usize + 1);
     file.take(MAX_BYTES + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| CredentialError::Unreadable)?;

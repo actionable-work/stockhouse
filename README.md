@@ -19,9 +19,11 @@ not part of this release.
   in the private cache first, then the shared cache, then a configured public
   upstream such as `cache.nixos.org`. Only a genuine miss falls through to
   the next cache. Signature, integrity and authorization failures stay
-  errors. The proxy checks every narinfo signature and the size and hash of each
-  downloaded file against its narinfo. Nix then checks the signed NAR hash.
-  The proxy never sends private credentials to the public upstream.
+  errors. The proxy checks every narinfo signature. It checks a downloaded
+  file's size and hash against the narinfo when the narinfo gives them or the
+  NAR is uncompressed, and otherwise passes it through. Nix then checks the
+  signed NAR hash. The proxy never sends private credentials to the public
+  upstream.
 - **Post-build ingestion**: the Nix post-build hook adds each built path to a
   durable, bounded queue and returns at once. A separate uploader drains the
   queue, retrying with backoff. When the queue is full it reports the

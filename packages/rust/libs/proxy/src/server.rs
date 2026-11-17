@@ -56,6 +56,8 @@ impl BoundServer {
     pub async fn run(self) {
         loop {
             let Ok((stream, _)) = self.listener.accept().await else {
+                // Persistent errors such as EMFILE would otherwise spin.
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 continue;
             };
             let state = Arc::clone(&self.state);

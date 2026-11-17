@@ -9,6 +9,14 @@ args:
     "CLIENT-INTEGRATION-VM-006"
   ];
   script = ''
+    with subtest("HOOK-009 the root hook writes as the queue owner"):
+        # The uploader is stopped so the record stays pending to inspect.
+        machine.systemctl("stop stockhouse-uploader")
+        dropped = build("dropped")
+        owner = machine.succeed(f"stat -c %U:%G {QUEUE}/pending/{store_hash(dropped)}.json").strip()
+        assert owner == "stockhouse:stockhouse", owner
+        machine.systemctl("start stockhouse-uploader")
+
     with subtest("VM-005 HOOK-009 an unwritable queue does not fail builds"):
         # Root could write a 0500 directory; the record is missing only
         # because the hook switched to the queue owner first.
