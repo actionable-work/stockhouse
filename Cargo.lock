@@ -1219,6 +1219,7 @@ dependencies = [
 name = "stockhouse-proxy"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "bytes",
  "ed25519-dalek",
  "futures-util",
@@ -1228,7 +1229,6 @@ dependencies = [
  "hyper-util",
  "reqwest",
  "serde",
- "sha2",
  "stockhouse-credentials",
  "stockhouse-proto",
  "tokio",

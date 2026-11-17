@@ -35,7 +35,7 @@ stockhouse-credentials = { default-features = false, path = "packages/rust/libs/
 stockhouse-ingest = { default-features = false, path = "packages/rust/libs/ingest" }
 stockhouse-proto = { default-features = false, path = "packages/rust/libs/proto" }
 stockhouse-proxy = { default-features = false, path = "packages/rust/libs/proxy" }
-tokio = { default-features = false, features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"], version = "=1.54.1" }
+tokio = { default-features = false, features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"], version = "=1.54.1" }
 toml = { default-features = false, features = ["parse", "serde", "std"], version = "=1.2.1" }
 uuid = { default-features = false, features = ["std", "v7"], version = "=1.29.3" }
 zeroize = { default-features = false, features = ["alloc"], version = "=1.9.1" }
