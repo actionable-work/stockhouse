@@ -130,7 +130,7 @@ design = "design/ingest.md"
 type = "event"
 trigger = "a pending record cannot be parsed or has a version other than 1"
 system = "queue"
-action = "move it to `failed/` with reason `corrupt` and continue with the remaining records"
+action = "move it unchanged to `failed/<hash>.corrupt` and continue with the remaining records"
 
 [[requirements]]
 id = "CLIENT-INGEST-QUEUE-012"

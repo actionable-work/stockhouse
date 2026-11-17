@@ -112,7 +112,8 @@ Each pass:
 1. Reconciles `pending/` with the ledger. A pending record whose `done/`
    record exists (a crash between the two writes) is removed, not
    re-uploaded. A pending record that does not parse or has another version
-   moves to `failed/` with reason `corrupt`.
+   moves, bytes unchanged, to `failed/<hash>.corrupt` (reason `corrupt`). Its
+   identity is unreadable, so a later enqueue of that path starts afresh.
 2. Rescans if needed (below).
 3. Uploads at most `batch_size` due records (`next_attempt_at <= now`) in
    `(next_attempt_at, id)` order, one at a time.
