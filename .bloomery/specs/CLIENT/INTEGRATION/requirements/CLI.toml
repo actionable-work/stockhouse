@@ -34,17 +34,6 @@ system = "CLI entry point"
 action = "reject it as an unknown flag with exit status 2"
 
 [[requirements]]
-id = "CLIENT-INTEGRATION-CLI-004"
-title = "Deferred login commands fail clearly"
-manual = false
-design = "design/integration.md"
-[requirements.ears]
-type = "event"
-trigger = "`login`, `logout` or `refresh` is run"
-system = "CLI entry point"
-action = "print that the command requires P2.06 and return exit status 1"
-
-[[requirements]]
 id = "CLIENT-INTEGRATION-CLI-005"
 title = "Status prints one JSON object"
 manual = false
@@ -65,3 +54,69 @@ type = "event"
 trigger = "`proxy` or `uploader` is run with a configuration that fails to load"
 system = "CLI entry point"
 action = "print the configuration error to stderr and return exit status 2"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-CLI-007"
+title = "Login signs in through the chosen flow"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`login --config <auth.toml>` or `login --config <auth.toml> --device` is run"
+system = "CLI entry point"
+action = "run the loopback or device sign-in flow, print its prompts to stdout and return 0 once the token set is stored, 1 when the flow fails and 2 when the configuration fails to load"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-CLI-008"
+title = "Logout reports a failed revocation"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`logout --config <auth.toml>` is run"
+system = "CLI entry point"
+action = "return 0 when the tokens were revoked and deleted or none were stored, and 1 with a message that the client is signed out locally when revocation failed"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-CLI-009"
+title = "Refresh reports the outcome"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`refresh --config <auth.toml>` is run"
+system = "CLI entry point"
+action = "return 0 after a refresh, and 1 with a message to sign in again when the client is signed out or the refresh failed"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-CLI-010"
+title = "Session status prints one JSON object"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`status --config <auth.toml>` is run"
+system = "CLI entry point"
+action = "print the session status as one JSON object without any token and return 0 when signed in and 1 otherwise"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-CLI-011"
+title = "Status needs exactly one target"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`status` is run with both `--queue` and `--config` or with neither"
+system = "CLI entry point"
+action = "print usage to stderr and return exit status 2"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-CLI-012"
+title = "Sign-in output never contains secrets"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`login`, `logout`, `refresh` or `status` runs against a fake server, succeeding or failing"
+system = "CLI entry point"
+action = "write stdout and stderr that contain no access token, refresh token, authorization code, PKCE verifier or device code, and contain `state` and `code_challenge` only inside the printed authorization URL"

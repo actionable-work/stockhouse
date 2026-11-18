@@ -82,8 +82,12 @@ fn cache_info(priority: u32) -> Response<Body> {
 }
 
 fn failure(state: &State, route: &str, error: &ProxyError) -> Response<Body> {
+    let detail = match error {
+        ProxyError::Credential { error, .. } => format!(" {}", error.kind()),
+        _ => String::new(),
+    };
     (state.log)(&format!(
-        "stockhouse-proxy: {route} {} {}",
+        "stockhouse-proxy: {route} {} {}{detail}",
         error.tier(),
         error.kind()
     ));
@@ -138,15 +142,11 @@ async fn nar_response(
     url: &str,
 ) -> Result<Response<Body>, ProxyError> {
     let missing = ProxyError::NarMissing { tier: tier.name() };
-    let resolved = tier.resolve(hash).await?.ok_or_else(|| missing.clone())?;
+    let mut resolved = tier.resolve(hash).await?.ok_or_else(|| missing.clone())?;
     if resolved.narinfo.url != url {
         return Err(ProxyError::NarInfoChanged { tier: tier.name() });
     }
-    let opened = tier
-        .upstream()
-        .open(url, resolved.auth.as_ref())
-        .await
-        .map_err(|e| tier.fail_upstream(e))?;
+    let opened = tier.open(&mut resolved.attempt, url).await?;
     let Fetched::Found((stream, upstream_len)) = opened else {
         return Err(missing);
     };

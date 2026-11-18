@@ -30,19 +30,29 @@ not part of this release.
   overflow, then rescans the local store to recover any paths it dropped.
   Each upload keeps its identity across restarts. Uploader failures never
   fail or block a build.
+- **Server sign-in**: an OAuth 2.0 public client. `stockhouse-auth login`
+  signs the machine in through a browser on the same machine (loopback
+  redirect with PKCE) or, with `--device`, by entering a code on any device.
+  Tokens are kept in a store sealed with XChaCha20-Poly1305 under a key held
+  as an encrypted systemd credential (TPM2 or host key), refreshed before
+  they expire with one refresh at a time across processes, and revoked by
+  `stockhouse-auth logout`. A revoked or signed-out machine gets errors from
+  the private cache, never misses.
 - **Credential sources**: credentials come only from a configured systemd
-  credential or owner-only file. They never enter derivations, the Nix store,
-  process arguments, upstream requests to other caches or logs.
+  credential, owner-only file or the signed-in token store. They never enter
+  derivations, the Nix store, process arguments, upstream requests to other
+  caches or logs.
 - **NixOS module** (`nixosModules.default`): systemd services for the proxy
   and the uploader, and the Nix substituter and post-build hook settings.
 
 ## Current limits
 
-- **No server sign-in or upload yet.** `stockhouse login`, `logout` and
-  `refresh` report that they are not available. The default uploader backend
-  keeps built paths queued until authenticated server upload exists. The
-  `nix-copy` backend copies paths to a local `file://` cache and is meant for
-  development and tests.
+- **Sign-in is tested against this repository's fake server only**, not a
+  real server. Sign-in is per machine, not per user.
+- **No server upload yet.** The default uploader backend keeps built paths
+  queued until authenticated server upload exists. The `nix-copy` backend
+  copies paths to a local `file://` cache and is meant for development and
+  tests.
 - **Supported systems:** `x86_64-linux` NixOS with systemd only, tested in
   NixOS VMs with Nix 2.34.8 and 2.31.5. Other Linux systems, distributions
   and operating systems are not claimed.
@@ -73,6 +83,16 @@ Add the flake to a NixOS configuration:
             };
           };
           services.stockhouse.uploader.enable = true;
+          # Optional: sign the private tier in to a server.
+          # services.stockhouse.proxy.private = { url = "https://cache.example.invalid/t/1/"; trustedKeys = [ … ]; };
+          # services.stockhouse.auth = {
+          #   enable = true;
+          #   server = "https://example.invalid/";
+          #   endpoints = { authorization = "…"; token = "…"; deviceAuthorization = "…"; revocation = "…"; };
+          #   clientId = "…";
+          #   scopes = [ "cache:read" ];
+          # };
+          # then, as root: stockhouse-auth login --device
         }
       ];
     };

@@ -1,0 +1,177 @@
+group = "REFRESH"
+
+[[requirements]]
+id = "CLIENT-CREDS-REFRESH-001"
+title = "A fresh access token is returned without network"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "`ServerCredential::credential` is called while the stored access token expires more than 60 s from now and is not rejected"
+system = "server credential"
+action = "return the stored access token without taking the lock or sending a request"
+
+[[requirements]]
+id = "CLIENT-CREDS-REFRESH-002"
+title = "The store is re-read on every use"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "another process writes or deletes the token store between two `credential` calls"
+system = "server credential"
+action = "return the newly stored access token, or `CredentialError::SignedOut` after a delete, on the later call"
+
+[[requirements]]
+id = "CLIENT-CREDS-REFRESH-003"
+title = "Refresh happens before expiry"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "`credential` is called within 60 s of the stored access token's expiry, or after it"
+system = "server credential"
+action = "acquire the store lock, re-read the store and send one `grant_type=refresh_token` request with the re-read refresh token and `client_id`"
+
+[[requirements]]
+id = "CLIENT-CREDS-REFRESH-004"
+title = "A refresh by another process is reused"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the token set re-read after acquiring the lock holds an access token that is not rejected and expires more than 60 s from now"
+system = "server credential"
+action = "return that access token without sending a refresh request"
+
+[[requirements]]
+id = "CLIENT-CREDS-REFRESH-005"
+title = "No refresh without the lock"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the store lock cannot be acquired within the configured wait"
+system = "server credential"
+action = "return `CredentialError::RefreshUnavailable` without sending a refresh request"
+
+[[requirements]]
+id = "CLIENT-CREDS-REFRESH-006"
+title = "Refreshed tokens are stored before use"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "a refresh returns a valid token response"
+system = "server credential"
+action = "write the new token set atomically, keeping the previous refresh token only when the response has none, before releasing the lock and returning the new access token"
+
+[[requirements]]
+id = "CLIENT-CREDS-REFRESH-007"
+title = "invalid_grant signs the client out"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "a refresh is answered with the `invalid_grant` error"
+system = "server credential"
+action = "delete the token store, release the lock and return `CredentialError::SignedOut`, and return `SignedOut` on later calls without sending a request"
+
+[[requirements]]
+id = "CLIENT-CREDS-REFRESH-008"
+title = "Transient refresh failures keep the tokens"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "a refresh fails with `temporarily_unavailable`, 429, a 5xx status, a redirect or a transport failure"
+system = "server credential"
+action = "keep the token store unchanged and return the current access token if it has not expired and is not rejected, otherwise `CredentialError::RefreshUnavailable`"
+
+[[requirements]]
+id = "CLIENT-CREDS-REFRESH-009"
+title = "Other refresh refusals keep the tokens"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "a refresh is answered with an error code other than `invalid_grant` or `temporarily_unavailable`, or an invalid 200 response"
+system = "server credential"
+action = "keep the token store unchanged and return `CredentialError::RefreshRejected`"
+
+[[requirements]]
+id = "CLIENT-CREDS-REFRESH-010"
+title = "Tokens without a refresh token are not refreshed"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the stored access token has expired or is rejected and the token set has no refresh token"
+system = "server credential"
+action = "return `CredentialError::SignedOut` without sending a request"
+
+[[requirements]]
+id = "CLIENT-CREDS-REFRESH-011"
+title = "Invalidation forces one refresh"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "`invalidate` is called with the stored access token while the token set has a refresh token, was obtained at least 60 s ago and this source performed no invalidation-forced refresh in the last 60 s"
+system = "server credential"
+action = "return `true` and make the next `credential` call refresh under the lock, unless the store by then holds a different access token that expires more than 60 s from now"
+
+[[requirements]]
+id = "CLIENT-CREDS-REFRESH-012"
+title = "A refresh token is never sent concurrently or after success"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "several threads and processes call `credential` on the same store while its access token needs refresh"
+system = "server credential"
+action = "send no two refresh requests with the same refresh token concurrently, and never send a refresh token again after the server answered it with 200"
+
+[[requirements]]
+id = "CLIENT-CREDS-REFRESH-013"
+title = "Refresh works from synchronous and async callers"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "`credential` needs a refresh while called from a plain thread or from a blocking thread of a Tokio runtime"
+system = "server credential"
+action = "perform the refresh on its own scoped thread and runtime without panicking or blocking the caller's runtime workers"
+
+[[requirements]]
+id = "CLIENT-CREDS-REFRESH-014"
+title = "The source factory builds every configured source"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "`stockhouse_auth::source` is called with a file, systemd or server credential spec"
+system = "credential source factory"
+action = "return the owner-only file source, the systemd credential source, or a `ServerCredential` loaded from the named auth configuration, failing with `AuthConfigError` when that configuration cannot be loaded"
+
+[[requirements]]
+id = "CLIENT-CREDS-REFRESH-015"
+title = "Invalidation declines when a retry cannot help"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "`invalidate` is called with the stored access token while no token set is stored, the set has no refresh token, the set was obtained less than 60 s ago, or this source performed an invalidation-forced refresh less than 60 s ago"
+system = "server credential"
+action = "return `false` at once when no token set is stored; otherwise wait for the store lock (held by any refresh in progress) and return `true` if the store then holds a different access token, else `false`; in every case record nothing and send no request"
+
+[[requirements]]
+id = "CLIENT-CREDS-REFRESH-016"
+title = "Transient refresh failures back off"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "a refresh failed transiently less than 10 s ago and another `credential` call, including one queued on the in-process mutex, needs a refresh"
+system = "server credential"
+action = "send no request and return the current access token if it has not expired and is not rejected, otherwise `CredentialError::RefreshUnavailable`"

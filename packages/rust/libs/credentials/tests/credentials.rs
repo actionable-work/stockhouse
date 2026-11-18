@@ -3,8 +3,8 @@ use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use stockhouse_credentials::{
-    CredentialError, CredentialSource, CredentialSpec, DeferredGrantFlow, GrantError, GrantFlow,
-    OwnerOnlyFile, Secret, SystemdCredential, source,
+    CredentialError, CredentialSource, CredentialSpec, OwnerOnlyFile, Secret, StaticCredential,
+    SystemdCredential, source,
 };
 
 fn temp_dir() -> PathBuf {
@@ -81,18 +81,6 @@ fn systemd_credentials_need_directory_and_plain_name() {
             "{name:?}"
         );
     }
-}
-
-#[cfg_attr(any(), bloomery("CLIENT-CREDS-SOURCE-004"))]
-#[test]
-fn grant_flow_is_deferred() {
-    let flow = DeferredGrantFlow;
-    let expected = Err(GrantError::Unavailable {
-        dependency: "P2.06",
-    });
-    assert_eq!(flow.login(), expected);
-    assert_eq!(flow.logout(), expected);
-    assert_eq!(flow.refresh(), expected);
 }
 
 #[cfg_attr(any(), bloomery("CLIENT-CREDS-FILE-001"))]
@@ -215,4 +203,52 @@ fn errors_never_contain_content() {
         let text = format!("{error} {error:?}");
         assert!(!text.contains("leak"), "{text}");
     }
+}
+
+#[cfg_attr(any(), bloomery("CLIENT-CREDS-SOURCE-006"))]
+#[test]
+fn static_sources_do_not_offer_a_retry() {
+    let dir = temp_dir();
+    write(&dir.join("token"), b"file-token\n", 0o600);
+    let sources: Vec<Box<dyn CredentialSource>> = vec![
+        Box::new(OwnerOnlyFile::new(dir.join("token"))),
+        Box::new(SystemdCredential::with_directory(
+            "token".to_owned(),
+            Some(dir.clone()),
+        )),
+        Box::new(StaticCredential::new(b"static-token")),
+    ];
+    for source in &sources {
+        let before = source.credential().unwrap();
+        assert!(!source.invalidate(&before));
+        assert_eq!(source.credential().unwrap().expose(), before.expose());
+    }
+}
+
+#[cfg_attr(any(), bloomery("CLIENT-CREDS-SOURCE-007"))]
+#[test]
+fn credentials_crate_cannot_build_a_server_source() {
+    let spec = CredentialSpec::Server(temp_dir().join("auth.toml"));
+    assert_eq!(
+        source(Some(&spec)).credential().map(|_| ()),
+        Err(CredentialError::Unsupported)
+    );
+}
+
+#[test]
+fn credential_specs_share_one_serde_form() {
+    #[derive(serde::Deserialize)]
+    struct Holder {
+        credential: CredentialSpec,
+    }
+    let parse = |text: &str| toml::from_str::<Holder>(text).map(|h| h.credential);
+    assert_eq!(
+        parse("credential = { server = \"/etc/auth.toml\" }").unwrap(),
+        CredentialSpec::Server(PathBuf::from("/etc/auth.toml"))
+    );
+    assert_eq!(
+        parse("credential = { systemd = \"private\" }").unwrap(),
+        CredentialSpec::Systemd("private".to_owned())
+    );
+    assert!(parse("credential = { token = \"x\" }").is_err());
 }

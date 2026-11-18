@@ -12,8 +12,14 @@ pub enum Parsed {
     Hook { queue: PathBuf },
     /// `status --queue <dir>`.
     Status { queue: PathBuf },
-    /// `login`, `logout` or `refresh`.
-    Grant(&'static str),
+    /// `status --config <auth.toml>`.
+    SessionStatus { config: PathBuf },
+    /// `login --config <auth.toml> [--device]`.
+    Login { config: PathBuf, device: bool },
+    /// `logout --config <auth.toml>`.
+    Logout { config: PathBuf },
+    /// `refresh --config <auth.toml>`.
+    Refresh { config: PathBuf },
     /// `--version`.
     Version,
 }
@@ -54,7 +60,7 @@ fn flag_name(arg: &str) -> String {
 fn flags(
     rest: &[String],
     value_flag: &'static str,
-    allow_once: bool,
+    switch: Option<&'static str>,
 ) -> Result<(PathBuf, bool), UsageError> {
     let (mut value, mut once) = (None, false);
     let mut iter = rest.iter();
@@ -63,7 +69,7 @@ fn flags(
             value = Some(PathBuf::from(
                 iter.next().ok_or(UsageError::MissingValue(value_flag))?,
             ));
-        } else if allow_once && arg == "--once" && !once {
+        } else if switch == Some(arg.as_str()) && !once {
             once = true;
         } else {
             return Err(UsageError::UnknownFlag(flag_name(arg)));
@@ -75,28 +81,38 @@ fn flags(
 /// Parses arguments after the program name.
 pub fn parse(args: &[String]) -> Result<Parsed, UsageError> {
     let (command, rest) = args.split_first().ok_or(UsageError::MissingCommand)?;
-    let no_flags = |parsed: Parsed| match rest.first() {
-        Some(extra) => Err(UsageError::UnknownFlag(flag_name(extra))),
-        None => Ok(parsed),
-    };
+    let config = || flags(rest, "--config", None).map(|(config, _)| config);
     match command.as_str() {
-        "proxy" => Ok(Parsed::Proxy {
-            config: flags(rest, "--config", false)?.0,
-        }),
+        "proxy" => Ok(Parsed::Proxy { config: config()? }),
         "uploader" => {
-            let (config, once) = flags(rest, "--config", true)?;
+            let (config, once) = flags(rest, "--config", Some("--once"))?;
             Ok(Parsed::Uploader { config, once })
         }
         "post-build-hook" => Ok(Parsed::Hook {
-            queue: flags(rest, "--queue", false)?.0,
+            queue: flags(rest, "--queue", None)?.0,
         }),
-        "status" => Ok(Parsed::Status {
-            queue: flags(rest, "--queue", false)?.0,
-        }),
-        "login" => no_flags(Parsed::Grant("login")),
-        "logout" => no_flags(Parsed::Grant("logout")),
-        "refresh" => no_flags(Parsed::Grant("refresh")),
-        "--version" => no_flags(Parsed::Version),
+        "status" => status(rest),
+        "login" => {
+            let (config, device) = flags(rest, "--config", Some("--device"))?;
+            Ok(Parsed::Login { config, device })
+        }
+        "logout" => Ok(Parsed::Logout { config: config()? }),
+        "refresh" => Ok(Parsed::Refresh { config: config()? }),
+        "--version" => match rest.first() {
+            Some(extra) => Err(UsageError::UnknownFlag(flag_name(extra))),
+            None => Ok(Parsed::Version),
+        },
         _ => Err(UsageError::UnknownCommand),
     }
+}
+
+/// `status` takes exactly one of `--queue <dir>` and `--config <file>`.
+fn status(rest: &[String]) -> Result<Parsed, UsageError> {
+    if rest.first().map(String::as_str) == Some("--config") {
+        let config = flags(rest, "--config", None)?.0;
+        return Ok(Parsed::SessionStatus { config });
+    }
+    Ok(Parsed::Status {
+        queue: flags(rest, "--queue", None)?.0,
+    })
 }

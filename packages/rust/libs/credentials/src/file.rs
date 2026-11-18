@@ -64,6 +64,12 @@ impl SystemdCredential {
         }
     }
 
+    /// Whether `name` is a plain credential name: non-empty, not `.` or
+    /// `..`, and without `/`.
+    pub fn valid_name(name: &str) -> bool {
+        !name.is_empty() && name != "." && name != ".." && !name.contains('/')
+    }
+
     fn directory(&self) -> Option<PathBuf> {
         match &self.directory {
             Some(dir) => dir.clone(),
@@ -75,11 +81,7 @@ impl SystemdCredential {
 impl CredentialSource for SystemdCredential {
     fn credential(&self) -> Result<Secret, CredentialError> {
         let dir = self.directory().ok_or(CredentialError::NotConfigured)?;
-        let plain = !self.name.is_empty()
-            && self.name != "."
-            && self.name != ".."
-            && !self.name.contains('/');
-        if !plain {
+        if !Self::valid_name(&self.name) {
             return Err(CredentialError::InvalidName);
         }
         let file = open(&dir.join(&self.name))?;

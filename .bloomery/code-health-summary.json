@@ -15,12 +15,12 @@
       }
     },
     {
-      "manifest_path": "packages/rust/libs/cli/Cargo.toml",
-      "name": "stockhouse-cli",
-      "overall_score": 99.52,
-      "sloc": 307,
+      "manifest_path": "packages/rust/libs/auth/Cargo.toml",
+      "name": "stockhouse-auth",
+      "overall_score": 99.97,
+      "sloc": 950,
       "subscores": {
-        "complexity": 0.48,
+        "complexity": 0.03,
         "crateSize": 0.0,
         "duplication": 0.0,
         "nesting": 0.0,
@@ -28,16 +28,29 @@
       }
     },
     {
-      "manifest_path": "packages/rust/libs/credentials/Cargo.toml",
-      "name": "stockhouse-credentials",
-      "overall_score": 99.77,
-      "sloc": 328,
+      "manifest_path": "packages/rust/libs/cli/Cargo.toml",
+      "name": "stockhouse-cli",
+      "overall_score": 99.33,
+      "sloc": 422,
       "subscores": {
-        "complexity": 0.23,
+        "complexity": 0.65,
         "crateSize": 0.0,
         "duplication": 0.0,
         "nesting": 0.0,
-        "size": 0.0
+        "size": 0.02
+      }
+    },
+    {
+      "manifest_path": "packages/rust/libs/credentials/Cargo.toml",
+      "name": "stockhouse-credentials",
+      "overall_score": 98.23,
+      "sloc": 362,
+      "subscores": {
+        "complexity": 1.61,
+        "crateSize": 0.0,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.16
       }
     },
     {
@@ -51,6 +64,19 @@
         "duplication": 0.0,
         "nesting": 0.0,
         "size": 0.02
+      }
+    },
+    {
+      "manifest_path": "packages/rust/libs/oauth_fake/Cargo.toml",
+      "name": "stockhouse-oauth-fake",
+      "overall_score": 100.0,
+      "sloc": 462,
+      "subscores": {
+        "complexity": 0.0,
+        "crateSize": 0.0,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.0
       }
     },
     {
@@ -69,10 +95,36 @@
     {
       "manifest_path": "packages/rust/libs/proxy/Cargo.toml",
       "name": "stockhouse-proxy",
-      "overall_score": 100.0,
-      "sloc": 1041,
+      "overall_score": 99.95,
+      "sloc": 1160,
       "subscores": {
-        "complexity": 0.0,
+        "complexity": 0.05,
+        "crateSize": 0.0,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.0
+      }
+    },
+    {
+      "manifest_path": "packages/rust/libs/signin/Cargo.toml",
+      "name": "stockhouse-signin",
+      "overall_score": 99.94,
+      "sloc": 515,
+      "subscores": {
+        "complexity": 0.06,
+        "crateSize": 0.0,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.0
+      }
+    },
+    {
+      "manifest_path": "packages/rust/libs/token_store/Cargo.toml",
+      "name": "stockhouse-token-store",
+      "overall_score": 99.89,
+      "sloc": 612,
+      "subscores": {
+        "complexity": 0.11,
         "crateSize": 0.0,
         "duplication": 0.0,
         "nesting": 0.0,
@@ -80,7 +132,7 @@
       }
     }
   ],
-  "input_digest": "aeea2723de495060971194b0d5848fe8afbcdb39f6bc3ff83460e48472783bbb",
+  "input_digest": "4fce80b17b7b959b3976da373634073a858dcdce4c4a42496822f4881456e096",
   "policy": {
     "scoring": {
       "crateSlocLimit": 1500,
@@ -104,11 +156,11 @@
   },
   "schema_version": 4,
   "workspace": {
-    "crate_count": 6,
-    "overall_score": 99.84,
-    "sloc": 4035,
+    "crate_count": 10,
+    "overall_score": 99.78,
+    "sloc": 6842,
     "subscores": {
-      "complexity": 0.16,
+      "complexity": 0.21,
       "crateSize": 0.0,
       "duplication": 0.0,
       "nesting": 0.0,

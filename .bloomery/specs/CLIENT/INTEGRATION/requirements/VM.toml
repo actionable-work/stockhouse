@@ -131,3 +131,69 @@ type = "event"
 trigger = "the VM tests run"
 system = "VM test suite"
 action = "run every VM requirement once with Nix 2.34.8 and once with Nix 2.31.5 as both client and daemon"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-013"
+title = "Device login signs the machine in"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`stockhouse-auth login --device` is run and the fake server approves the printed user code"
+system = "installed client"
+action = "store a sealed token set, report signed in from `stockhouse-auth status`, and substitute a private-tier path through the proxy with the access token"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-014"
+title = "Loopback login signs the machine in"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`stockhouse-auth login` is run and the printed authorization URL is opened on the machine"
+system = "installed client"
+action = "receive the code on the `127.0.0.1` loopback callback, exchange it with the PKCE verifier and report signed in"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-015"
+title = "Refresh across expiry is serialized"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the access token expires while the proxy serves concurrent lookups and several sign-in processes refresh concurrently"
+system = "installed client"
+action = "keep serving private-tier hits, rotate the refresh token, and never send a rotated refresh token to the fake server again"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-016"
+title = "A revoked grant is a 503, not a miss"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the fake server revokes the grant family and a private-tier path is looked up and realised"
+system = "installed client"
+action = "answer 503 for the narinfo through the proxy, fail the realisation with Nix reporting the 503 instead of treating it as a miss, report signed out from `stockhouse-auth status`, log the signed-out credential, and after signing in again substitute the same path at once with no negative cache entry in the way"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-017"
+title = "Logout revokes and deletes"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`stockhouse-auth logout` is run while signed in"
+system = "installed client"
+action = "send the refresh token to the fake revocation endpoint, ending its grant family, delete the token store and make later private-tier lookups answer 503"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-018"
+title = "Tokens stay in the owner-only sealed store"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the machine is signed in"
+system = "installed client"
+action = "keep the store directory `0700` and its file `0600`, both owned by `stockhouse`, with neither token in `tokens.sealed`, the journal, any process's arguments, the units or the generated configuration"

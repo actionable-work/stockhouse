@@ -40,8 +40,8 @@
     http.server.HTTPServer(("127.0.0.1", 8485), Handler).serve_forever()
   '';
 
-  node = nixPackage: {config, ...}: {
-    imports = [module];
+  node = nixPackage: extraModule: {config, ...}: {
+    imports = [module extraModule];
     nix.package = nixPackage;
     nix.settings.secret-key-files = ["/etc/stockhouse-vm/key.sec"];
     # Builds query the proxy before building; do not cache those misses.
@@ -131,6 +131,36 @@
         machine.wait_until_succeeds(f"test -f {QUEUE}/done/{store_hash(path)}.json", timeout=120)
 
 
+    FAKE = "http://127.0.0.1:8486"
+
+
+    def fake(path="/__fake/state"):
+        return json.loads(machine.succeed(f"curl -sf '{FAKE}{path}'"))
+
+
+    def fixture(tag):
+        """A daemon-signed path copied into the fake's private cache and deleted locally."""
+        expr = f'derivation {{ name = "vm-{tag}"; system = builtins.currentSystem; builder = "/bin/sh"; args = [ "-c" "echo {tag} > $out" ]; }}'
+        path = machine.succeed(f"nix-build --option substituters ''' --no-out-link -E '{expr}'").strip()
+        machine.succeed(f"nix --extra-experimental-features nix-command copy --to file:///var/lib/stockhouse-vm/server-cache {path}")
+        machine.succeed(f"nix-store --delete {path}")
+        return path
+
+
+    def device_login():
+        machine.succeed("rm -f /tmp/login.out")
+        machine.succeed("setsid stockhouse-auth login --device < /dev/null > /tmp/login.out 2>&1 &")
+        machine.wait_until_succeeds("grep -q 'enter the code' /tmp/login.out", timeout=60)
+        code = machine.succeed("sed -n 's/.*enter the code: //p' /tmp/login.out").strip()
+        fake(f"/__fake/approve?user_code={code}")
+        machine.wait_until_succeeds("grep -q 'Signed in.' /tmp/login.out", timeout=60)
+
+
+    def signed_in():
+        code, out = machine.execute("stockhouse-auth status")
+        return code == 0 and json.loads(out)["signed_in"]
+
+
     def wait_drained():
         machine.wait_until_succeeds(f"test $(ls {QUEUE}/pending | wc -l) -eq 0", timeout=120)
 
@@ -147,6 +177,9 @@
     machine.wait_for_open_port(8484)
   '';
 
+  # The sign-in node module: fake OAuth server and sealed server sign-in.
+  authModule = import ./auth.nix {inherit pkgs lib keyName publicKey;};
+
   nixVersions = {
     "nix-2_34" = pkgs.nixVersions.nix_2_34;
     "nix-2_31" = pkgs.nixVersions.nix_2_31;
@@ -156,11 +189,16 @@ in {
   story = story: {
     script,
     passthru,
+    signIn ? false,
   }:
     lib.mapAttrs' (version: nixPackage:
       lib.nameValuePair "vm-${story}-${version}" (pkgs.testers.runNixOSTest {
         name = "stockhouse-vm-${story}-${version}";
-        nodes.machine = node nixPackage;
+        nodes.machine = node nixPackage (
+          if signIn
+          then authModule
+          else {}
+        );
         testScript = prelude + script;
         inherit passthru;
       }))

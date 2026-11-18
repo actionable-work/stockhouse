@@ -27,6 +27,8 @@ pub struct BoundServer {
 /// Binds exactly the configured address; an occupied port is an error.
 pub async fn bind(config: &ProxyConfig, log: LogSink) -> Result<BoundServer, ServeError> {
     let addr = config.listen;
+    // Credential sources are built (and checked) before listening.
+    let lookup = Lookup::new(config)?;
     let listener = TcpListener::bind(addr)
         .await
         .map_err(|error| match error.kind() {
@@ -34,7 +36,7 @@ pub async fn bind(config: &ProxyConfig, log: LogSink) -> Result<BoundServer, Ser
             _ => ServeError::Bind { addr, error },
         })?;
     let state = State {
-        lookup: Lookup::new(config)?,
+        lookup,
         priority: config.priority,
         log,
     };

@@ -45,12 +45,23 @@ system = "systemd credential source"
 action = "return `CredentialError::NotConfigured` or `CredentialError::InvalidName` respectively without opening any file"
 
 [[requirements]]
-id = "CLIENT-CREDS-SOURCE-004"
-title = "The grant flow is deferred"
+id = "CLIENT-CREDS-SOURCE-006"
+title = "Static sources do not offer a retry"
 manual = false
 design = "design/credentials.md"
 [requirements.ears]
 type = "event"
-trigger = "login, logout or refresh is requested"
-system = "deferred grant flow"
-action = "return `GrantError::Unavailable` naming dependency `P2.06` without network access or local state changes"
+trigger = "`invalidate` is called on an owner-only file, systemd or static credential source"
+system = "credential source"
+action = "return `false` and leave the source's later results unchanged"
+
+[[requirements]]
+id = "CLIENT-CREDS-SOURCE-007"
+title = "The credentials crate cannot build a server source"
+manual = false
+design = "design/credentials.md"
+[requirements.ears]
+type = "event"
+trigger = "`stockhouse_credentials::source` is called with a server credential spec"
+system = "credential source resolver"
+action = "return a source that fails with `CredentialError::Unsupported` without reading any file"

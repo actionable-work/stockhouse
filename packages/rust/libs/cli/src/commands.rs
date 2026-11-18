@@ -4,7 +4,6 @@ use std::io::Write;
 use std::panic::{AssertUnwindSafe, UnwindSafe, catch_unwind};
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use stockhouse_credentials::{DeferredGrantFlow, GrantFlow};
 use stockhouse_ingest::{
     BackendConfig, DeferredUploader, NixCopyUploader, NixPathInfoScanner, NoScanner, Queue,
     Scanner, ScannerConfig, Uploader, UploaderConfig, Worker, hook,
@@ -12,7 +11,7 @@ use stockhouse_ingest::{
 use stockhouse_proto::PROTOCOL_VERSION;
 use stockhouse_proxy::ProxyConfig;
 
-const EXIT_FAILURE: u8 = 1;
+pub(crate) const EXIT_FAILURE: u8 = 1;
 
 pub(crate) fn dispatch(
     parsed: Parsed,
@@ -29,7 +28,10 @@ pub(crate) fn dispatch(
             );
             0
         }
-        Parsed::Grant(command) => grant(command, err),
+        Parsed::Login { config, device } => crate::session::login(&config, device, out, err),
+        Parsed::Logout { config } => crate::session::logout(&config, out, err),
+        Parsed::Refresh { config } => crate::session::refresh(&config, out, err),
+        Parsed::SessionStatus { config } => crate::session::status(&config, out, err),
         Parsed::Status { queue } => status(&queue, out, err),
         Parsed::Hook { queue } => {
             let out_paths = env("OUT_PATHS").unwrap_or_default();
@@ -52,22 +54,6 @@ fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
-}
-
-fn grant(command: &str, err: &mut dyn Write) -> u8 {
-    let flow = DeferredGrantFlow;
-    let result = match command {
-        "login" => flow.login(),
-        "logout" => flow.logout(),
-        _ => flow.refresh(),
-    };
-    match result {
-        Ok(()) => 0,
-        Err(error) => {
-            let _ = writeln!(err, "stockhouse {command}: {error}");
-            EXIT_FAILURE
-        }
-    }
 }
 
 fn status(queue: &Path, out: &mut dyn Write, err: &mut dyn Write) -> u8 {
@@ -124,7 +110,11 @@ fn proxy(path: &Path, err: &mut dyn Write) -> u8 {
             }
             Err(error) => {
                 let _ = writeln!(err, "stockhouse proxy: {error}");
-                EXIT_FAILURE
+                if error.is_configuration() {
+                    EXIT_USAGE
+                } else {
+                    EXIT_FAILURE
+                }
             }
         }
     })

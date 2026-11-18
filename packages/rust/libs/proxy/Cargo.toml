@@ -7,6 +7,7 @@ hyper = { workspace = true }
 hyper-util = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
+stockhouse-auth = { workspace = true }
 stockhouse-credentials = { workspace = true }
 stockhouse-proto = { workspace = true }
 tokio = { workspace = true }
@@ -15,6 +16,8 @@ toml = { workspace = true }
 [dev-dependencies]
 base64 = { workspace = true }
 ed25519-dalek = { workspace = true }
+stockhouse-oauth-fake = { workspace = true }
+stockhouse-token-store = { workspace = true }
 
 [package]
 name = "stockhouse-proxy"

@@ -137,6 +137,8 @@ fn no_argument_accepts_a_credential() {
         vec!["proxy", "--config", "/x", "--token", "s3cr3t"],
         vec!["uploader", "--token=s3cr3t", "--config", "/x"],
         vec!["login", "--password", "s3cr3t"],
+        vec!["login", "--config", "/x", "--token", "s3cr3t"],
+        vec!["refresh", "--config", "/x", "--refresh-token=s3cr3t"],
     ] {
         let (code, out, err) = cli(&args, None);
         assert_eq!(code, 2, "{args:?}");
@@ -144,16 +146,6 @@ fn no_argument_accepts_a_credential() {
             !format!("{out}{err}").contains("s3cr3t"),
             "values are never echoed"
         );
-    }
-}
-
-#[cfg_attr(any(), bloomery("CLIENT-INTEGRATION-CLI-004"))]
-#[test]
-fn deferred_login_commands_fail_clearly() {
-    for command in ["login", "logout", "refresh"] {
-        let (code, _, err) = cli(&[command], None);
-        assert_eq!(code, 1);
-        assert!(err.contains("P2.06"), "{err}");
     }
 }
 

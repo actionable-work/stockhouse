@@ -1,21 +1,33 @@
 [workspace]
 members = [
   "packages/rust/bins/stockhouse",
+  "packages/rust/libs/auth",
   "packages/rust/libs/cli",
   "packages/rust/libs/credentials",
   "packages/rust/libs/ingest",
+  "packages/rust/libs/oauth_fake",
   "packages/rust/libs/proto",
   "packages/rust/libs/proxy",
+  "packages/rust/libs/signin",
+  "packages/rust/libs/token_store",
 ]
 resolver = "2"
 
 [workspace.dependencies]
 base64 = { default-features = false, features = ["alloc"], version = "=0.22.1" }
 bytes = { default-features = false, features = ["std"], version = "=1.12.1" }
+chacha20poly1305 = { default-features = false, features = [
+  "alloc",
+  "zeroize",
+], version = "=0.11.0" }
 ed25519-dalek = { default-features = false, version = "=3.0.0" }
+form_urlencoded = { default-features = false, features = [
+  "alloc",
+], version = "=1.2.2" }
 futures-util = { default-features = false, features = [
   "std",
 ], version = "=0.3.34" }
+getrandom = { default-features = false, version = "=0.4.3" }
 http = { default-features = false, features = ["std"], version = "=1.5.0" }
 http-body-util = { default-features = false, version = "=0.1.5" }
 hyper = { default-features = false, features = [
@@ -38,11 +50,15 @@ serde_json = { default-features = false, features = [
   "std",
 ], version = "=1.0.154" }
 sha2 = { default-features = false, version = "=0.11.1" }
+stockhouse-auth = { default-features = false, path = "packages/rust/libs/auth" }
 stockhouse-cli = { default-features = false, path = "packages/rust/libs/cli" }
 stockhouse-credentials = { default-features = false, path = "packages/rust/libs/credentials" }
 stockhouse-ingest = { default-features = false, path = "packages/rust/libs/ingest" }
+stockhouse-oauth-fake = { default-features = false, path = "packages/rust/libs/oauth_fake" }
 stockhouse-proto = { default-features = false, path = "packages/rust/libs/proto" }
 stockhouse-proxy = { default-features = false, path = "packages/rust/libs/proxy" }
+stockhouse-signin = { default-features = false, path = "packages/rust/libs/signin" }
+stockhouse-token-store = { default-features = false, path = "packages/rust/libs/token_store" }
 tokio = { default-features = false, features = [
   "fs",
   "io-util",

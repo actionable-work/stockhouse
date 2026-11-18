@@ -18,7 +18,7 @@ request_timeout_secs = 30   # connect and per-read timeout for upstreams
 [private]                   # optional
 url = "https://cache.example.invalid/org/"
 trusted_keys = ["org-1:<base64>"]
-credential = { systemd = "private" }   # or { file = "/abs/path" }
+credential = { systemd = "private" }   # or { file = "/abs/path" } or { server = "/abs/auth.toml" }
 
 [shared]                    # optional, same shape as private
 
@@ -41,6 +41,18 @@ trusted_keys = ["cache.nixos.org-1:<base64>"]
 | `public` with a `credential` | `CredentialOnPublicTier` |
 | a `file://` tier with a `credential` | `CredentialOnFileTier { tier }` |
 | a credential on `http://` to a host that is not a loopback address | `CleartextCredential { tier }` |
+| a `server` credential on a tier other than `private`, or with a relative path or a `.` or `..` component | `ServerCredential { tier }` |
+
+A `server` credential names the [sign-in configuration](../../CREDS/design/oauth.md#configuration)
+(a non-secret file, normally the module's generated store file). The proxy
+builds every tier's source with `stockhouse_auth::source` when it binds.
+Loading that configuration can fail (`ServeError::Credential { tier }`), and
+its `private_tier` must equal the tier's `url`, compared as parsed URLs
+(scheme and host lowercased, default port removed, percent-encoding
+normalized by the URL parser) rather than as strings
+(`ServeError::CredentialAudience { tier }`), so the access token is sent only
+to the cache it was issued for. Both are configuration errors: the proxy
+exits before listening.
 
 ## Tiers and upstream fetches
 
@@ -72,9 +84,35 @@ answer 404 for a missing narinfo. `cache.nixos.org` does.
 HTTP tiers with a credential send `Authorization: Bearer <secret>`, marked
 sensitive, on every request to that tier and to no other tier. Because
 redirects are not followed, the header cannot be forwarded to another
-origin. The credential is resolved per request, before any request is sent
-to that tier. The static bearer header is a placeholder until the P2.08
-authenticated cache protocol and P2.06 grants define the real exchange.
+origin. The credential is resolved per proxy request, before any request is
+sent to that tier. `credential()` may block (store reads, a token refresh), so
+the proxy calls it through `tokio::task::spawn_blocking` and never on an async
+worker; a source that blocks does not delay other requests. For the private
+tier with a `server` credential the secret is the signed-in access token
+([refresh](../../CREDS/design/oauth.md#refresh)); `file` and `systemd`
+credentials remain static bearer values.
+
+### Rejected credentials
+
+An HTTP tier that answers 401 (`UpstreamError::Unauthorized`, distinct from
+403 internally) to a request that carried a credential gets one retry per
+proxy request:
+
+1. Call `invalidate(sent)` on the tier's source (on the blocking pool). If it
+   returns `false` (a static credential), stop: the result is `Denied`.
+2. Resolve the credential again. A failure is `Credential { tier }`, with no
+   further request.
+3. Repeat the same upstream request once with the new credential, and use
+   that credential for the rest of this proxy request (the narinfo after
+   `nix-cache-info`, the NAR after its narinfo). A second 401 anywhere in the
+   same proxy request is `Denied`, without another invalidation.
+
+This applies to `nix-cache-info`, narinfo and NAR fetches (a NAR is retried
+only before any response byte is sent). A 403 never triggers invalidation or
+retry. Like every credential and denial error, the outcome is 503, never a
+404 or miss: plain Nix treats a 401 or 404 from a substituter as "not here"
+and may cache that negative answer, so a revoked grant must not look like an
+empty cache.
 Upstream connect and per-read time is limited by `request_timeout_secs`;
 exceeding it is `Unavailable`.
 
@@ -166,5 +204,7 @@ use it fails with `ServeError::AddressInUse { addr }` and exits nonzero; it
 never chooses another port, because Nix's configuration names a fixed URL.
 
 The proxy logs one line per failed lookup to stderr with the tier, route
-kind and error kind. Logs, error bodies and error `Display` text never
+kind and error kind. For `Credential` errors the line also names the
+credential error kind (for example `signed-out` or `refresh-unavailable`),
+so an operator can tell a signed-out machine from an outage. Logs, error bodies and error `Display` text never
 include request headers or credential values.

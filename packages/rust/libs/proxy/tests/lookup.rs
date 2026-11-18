@@ -267,7 +267,7 @@ async fn credential_failures_do_not_fall_through() {
         t.proxy
             .log_lines()
             .iter()
-            .any(|l| l.ends_with("private credential"))
+            .any(|l| l.ends_with("private credential missing"))
     );
 }
 

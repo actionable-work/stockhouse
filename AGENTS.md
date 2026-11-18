@@ -43,12 +43,16 @@ This repository is public from its first commit, and the server is private.
 | --- | --- |
 | `packages/rust/bins/stockhouse` | Thin binary: `main.rs` forwards `std::env::args()` to `stockhouse_cli::main` |
 | `packages/rust/libs/proto` | `stockhouse-proto`: store paths, hashes, narinfo, nix-cache-info, signatures, integrity, upload identity |
-| `packages/rust/libs/credentials` | `stockhouse-credentials`: `Secret`, credential sources, deferred grant flow |
+| `packages/rust/libs/credentials` | `stockhouse-credentials`: `Secret`, `CredentialSource` (with the `invalidate` retry hook), the shared `CredentialSpec` (`file`, `systemd`, `server`), file and systemd sources |
+| `packages/rust/libs/token_store` | `stockhouse-token-store`: the sealed (XChaCha20-Poly1305, systemd credential key) or explicit plaintext token store, atomic writes and the cross-process lock |
+| `packages/rust/libs/auth` | `stockhouse-auth`: sign-in configuration, token and revocation endpoint client, the refreshing `ServerCredential`, logout, status and the `source` factory every consumer uses |
+| `packages/rust/libs/signin` | `stockhouse-signin`: loopback PKCE and device sign-in flows (CLI only) |
+| `packages/rust/libs/oauth_fake` | `stockhouse-oauth-fake`: test-only fake OAuth server and private cache for component tests |
 | `packages/rust/libs/proxy` | `stockhouse-proxy`: configuration, tier upstreams, lookup policy and the loopback HTTP server |
 | `packages/rust/libs/ingest` | `stockhouse-ingest`: durable queue, post-build hook, uploader passes, backends, rescan |
-| `packages/rust/libs/cli` | `stockhouse-cli`: command dispatch and exit status |
+| `packages/rust/libs/cli` | `stockhouse-cli`: command dispatch and exit status, including `login`, `logout`, `refresh` and `status --config` |
 | `nix/module.nix` | The NixOS client module (`nixosModules.default`) |
-| `tests/` | Bloomery test subflake: module evaluation and NixOS VM tests |
+| `tests/` | Bloomery test subflake: module evaluation and NixOS VM tests; `tests/lib/fake_server.py` is the VM stories' fake OAuth server and private cache |
 | `.bloomery/specs/CLIENT/` | Code-facing specifications (EARS requirements and designs) |
 | `docs/` | Slice records and follow-ups |
 
