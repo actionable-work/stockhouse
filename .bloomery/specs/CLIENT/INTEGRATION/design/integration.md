@@ -7,6 +7,8 @@
 `fn main() -> std::process::ExitCode { stockhouse_cli::main(std::env::args().collect()) }`
 and the crate depends only on `stockhouse-cli`. Behavior lives in library
 crates with their own component tests.
+The test-only `packages/rust/bins/stockhouse-fake-server` follows the same
+rule with `stockhouse_fake_server_cli::main` (see [Fake server](#fake-server)).
 
 ## Commands
 
@@ -310,14 +312,15 @@ fixture signing key is written in the VM at runtime from a constant public
 seed and set as the daemon's `secret-key-files`, so locally built paths are
 signed. It is synthetic and trusted only inside the test VM. The VM has no
 network, a `file://` private tier that is also the `nix-copy` destination, and
-a loopback HTTP shared-tier fixture. The fixture records request headers,
+a loopback HTTP shared-tier fixture (the [fake server](#fake-server) in
+`shared` mode on `127.0.0.1:8485`). The fixture records request headers,
 answers 403 and 500 for two chosen hashes and 404 otherwise, so denied and
 unavailable tiers are exercised through real Nix and the real proxy. The node
 sets `narinfo-cache-negative-ttl = 0`, because every build first queries the
 proxy and a cached miss would hide the later upload, and it keeps the
 writable store on disk so built paths survive the reboot story.
 
-`tests/module-{proxy,ingest,auth,upload,lease}.test.nix` evaluate the module without a VM
+`tests/module-{proxy,ingest,auth,auth-wrapper,upload,lease,fake}.test.nix` evaluate the module without a VM
 to check generated units, configuration and assertions.
 
 ### Sign-in stories
@@ -325,7 +328,7 @@ to check generated units, configuration and assertions.
 `tests/vm-{signin,refresh}.test.nix` use the shared node with an extra module
 (`tests/lib/auth.nix`) that enables `services.stockhouse.auth` in sealed mode
 (with the module's key oneshot, which uses the host key since the VM has no
-TPM2) against a fake server, `tests/lib/fake_server.py`, on
+TPM2) against the [fake server](#fake-server) in `oauth` mode on
 `http://127.0.0.1:8486/`, with the proxy's private tier at
 `http://127.0.0.1:8486/t/1/`. The extra module restores Nix's default
 `narinfo-cache-negative-ttl` (3600 s) so that the no-negative-cache check
@@ -363,7 +366,7 @@ left behind.
 The `upload`, `upload-recovery` and `lease` stories use the same node with
 `uploader.backend = "server"` and lease renewal enabled
 (`randomizedDelaySec = 0`, `backoffMax = 10`). The private tier is a local
-fake server (`tests/lib/upload_server.py`, loopback `http://127.0.0.1:8486/t/1/`)
+fake server (the [fake server](#fake-server) in `upload` mode, loopback `http://127.0.0.1:8486/t/1/`)
 that implements protocol v1 from this repository's spec: it requires the
 bearer from a runtime credential file (401 otherwise), keeps uploads,
 published paths and leases on disk under `/var/lib/stockhouse-fake` so they
@@ -377,3 +380,79 @@ released, or close the connection without replying after publishing a
 chosen NAR. It serves `nix-cache-info` and answers 404 to narinfo, so the
 proxy's private tier stays a valid upstream. It is a test fixture, not a
 server implementation, and it claims nothing about a real server.
+
+## Fake server
+
+Every VM fixture server is one Rust test binary,
+`packages/rust/bins/stockhouse-fake-server`, a thin wrapper over
+`stockhouse_fake_server_cli::main` (`packages/rust/libs/fake_server_cli`),
+so the fixtures are compiled, linted and component-tested by `bloomery check`
+like the client. The OAuth logic is shared with the component tests'
+`stockhouse-oauth-fake`. The flake builds it as its own package
+(`packages.x86_64-linux.stockhouse-fake-server`), which only the tests
+subflake uses; the `stockhouse` package and the NixOS module never contain,
+install or run it. It claims nothing about any real server.
+
+| Command | Serves |
+| --- | --- |
+| `oauth --listen <addr> [--cache-dir <dir>]` | the sign-in stories' OAuth endpoints and private cache |
+| `upload --listen <addr> --root <dir> --token-file <file>` | the upload stories' protocol v1 fake |
+| `shared --listen <addr> --log <file> [--deny <hash>] [--fail <hash>]` | the shared-tier fixture |
+
+A missing or unknown command or flag, a missing value or an unparsable
+address prints usage to stderr and exits 2; a failed bind exits 1. Otherwise
+it serves until stopped.
+
+`oauth` mode:
+
+- Device codes wait for approval; the verification URI is
+  `http://<addr>/device`; refresh requests take 200 ms, so concurrent
+  refreshes of one token overlap and are recorded; issued tokens carry
+  `scope = "cache:read"`.
+- Each issued access token expires after the current lifetime (default
+  600 s); `/t/1/` answers 401 to an expired, superseded or absent token.
+- `/t/1/nix-cache-info` is `StoreDir: /nix/store`; any other `/t/1/<rel>`
+  is the file `<cache-dir>/<rel>`, 404 when absent or when `<rel>` has an
+  empty, `.` or `..` component.
+- Control routes, answering the state report: `/__fake/approve?user_code=<c>`
+  approves that device code, `/__fake/revoke` ends the grant family,
+  `/__fake/config?lifetime=<s>` sets the lifetime of later tokens, and
+  `/__fake/state` only reports. The report is a JSON object with
+  `lifetime`, `access` and `refresh` (current tokens or `null`), `rotated`,
+  `issued`, `reuse`, `overlaps`, `revoked` (every token sent to the
+  revocation endpoint) and `refreshes` (refresh grants received).
+
+`upload` mode keeps its state under `<root>`: `state.json` (`uploads`, each
+`{decl, state}` keyed by upload identity, and `held`, the published store
+path base names), `requests.log` (one `METHOD REL HASH RESULT` line per
+request, `-` when no path is known), `leases.log` (`MACHINE SLOT
+STORE_PATH`) and the control files in `control/` (created at start), so
+everything survives a restart. Every reply carries `Connection: close`.
+
+- `GET /t/1/nix-cache-info` answers `StoreDir: /nix/store` and any
+  `*.narinfo` 404, both without a bearer. Every other request needs
+  `Authorization: Bearer <token>` with the token file's trimmed content,
+  read per request (401, logged `- 401`, otherwise); then `control/down`
+  answers 503 `unavailable`.
+- `POST uploads/<id>` with a declaration: `published` if that upload is
+  published; `present` if the path is held or `control/present-<hash>`
+  exists; 507 `quota_exceeded` under `control/quota`; 422
+  `missing_references` (listing them) for references other than itself that
+  are neither held nor `present-<hash>`; otherwise the upload is recorded
+  `open` (once) and answered `open`. A body without a string `store_path`
+  and a `references` list of strings is 400 `bad_request`.
+- `GET uploads/<id>` answers its state, or 404 `unknown_upload`.
+- `PUT uploads/<id>/nar`: 404 `unknown_upload` for an unknown upload; while
+  `control/stall-<hash>` exists it logs `stalled` and waits before reading
+  the body; a body cut short is logged `aborted` and the connection closed;
+  under `control/reject-<hash>`, or when the body's size or
+  `sha256:<nix32>` differs from the declaration, 400 `verification_failed`;
+  otherwise the upload is published and its path held, then under
+  `control/drop-<hash>` the control file is removed, the request logged
+  `dropped` and the connection closed without a reply, else `published`.
+- `PUT leases/<machine>/<slot>` with `{store_path}` appends to `leases.log`
+  and answers `renewed`.
+
+`shared` mode appends `<path> <Authorization or ->` to the log for each
+`GET`, and answers `/nix-cache-info` 200 `StoreDir: /nix/store`,
+`/<deny>.narinfo` 403, `/<fail>.narinfo` 500 and anything else 404.

@@ -35,15 +35,26 @@ detailed plans are [`plans/P2_09_AUTH.md`](plans/P2_09_AUTH.md) and
     `r3b2a12-18e91ebbb3abfdef-0`, 128 checks passed.
   - With Nix `fallback` (from the private end-to-end drill): run
     `r8520-18e92567bf8b8029-0`, 128 checks passed.
+  - With the Rust `stockhouse-fake-server` replacing the Python VM fakes:
+    run `rbdaf6-18e9277ae40b2775-0`, 144 checks passed (all VM stories on
+    both Nix pins, `tests:module-fake` and the fake server's component
+    tests).
 - `nix flake check` passes on the tip. It includes the module evaluation checks
-  `tests:module-{proxy,ingest,auth,auth-wrapper,upload,lease}` and nine VM
+  `tests:module-{proxy,ingest,auth,auth-wrapper,upload,lease,fake}` and nine VM
   stories
   (`tests:vm-{proxy,substitution,durability,lifecycle,signin,refresh,upload,upload-recovery,lease}`),
   each with Nix 2.34.8 and 2.31.5 as both client and daemon.
-- The sign-in stories run against `tests/lib/fake_server.py` (OAuth and a
-  private cache). The upload stories run against `tests/lib/upload_server.py`,
-  a fake of protocol v1. Both are fixtures written from this repository's
-  specs. The stories cover:
+- The VM stories run against `stockhouse-fake-server`, a test-only Rust
+  binary (`packages/rust/bins/stockhouse-fake-server` over
+  `stockhouse-fake-server-cli`, its own flake package used only by the
+  tests subflake): `oauth` mode (OAuth and a private cache, sharing the
+  component tests' `stockhouse-oauth-fake`) for the sign-in stories,
+  `upload` mode (a fake of protocol v1) for the upload stories and `shared`
+  mode for the shared-tier fixture. They replaced the earlier Python fakes
+  (`tests/lib/fake_server.py`, `tests/lib/upload_server.py` and the inline
+  shared fixture), so the fixtures are compiled, linted and component-tested
+  by `bloomery check` (`CLIENT-INTEGRATION-FAKE-*`). All are fixtures
+  written from this repository's specs. The stories cover:
   - closure upload references first, with present and ledgered paths not
     sent;
   - verification rejection;

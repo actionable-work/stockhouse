@@ -1295,6 +1295,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "stockhouse-fake-server"
+version = "0.1.0"
+dependencies = [
+ "stockhouse-fake-server-cli",
+]
+
+[[package]]
+name = "stockhouse-fake-server-cli"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "serde",
+ "serde_json",
+ "sha2",
+ "stockhouse-oauth-fake",
+ "stockhouse-proto",
+ "tokio",
+]
+
+[[package]]
 name = "stockhouse-ingest"
 version = "0.1.0"
 dependencies = [

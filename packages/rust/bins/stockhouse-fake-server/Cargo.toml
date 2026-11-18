@@ -1,0 +1,10 @@
+[dependencies]
+stockhouse-fake-server-cli = { workspace = true }
+
+[package]
+name = "stockhouse-fake-server"
+publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true

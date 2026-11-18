@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
-use std::time::Duration;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 /// One request the fake received.
 #[derive(Clone, Debug)]
@@ -70,6 +71,8 @@ pub struct State {
     pub issue_refresh: bool,
     /// The current access token.
     pub access: Option<String>,
+    /// When the current access token expires.
+    pub access_expires: Option<Instant>,
     /// The current refresh token.
     pub refresh: Option<String>,
     /// Refresh tokens already rotated away.
@@ -94,8 +97,18 @@ pub struct State {
     pub auto_approve: bool,
     /// Cache files under `/t/1/`.
     pub cache: HashMap<String, Vec<u8>>,
+    /// Files served under `/t/1/` when absent from `cache`.
+    pub cache_dir: Option<PathBuf>,
     /// Every token issued.
     pub issued: Vec<String>,
+    /// Every token sent to the revocation endpoint.
+    pub revoked: Vec<String>,
+    /// Refresh grants received.
+    pub refreshes: u64,
+    /// The device `verification_uri`.
+    pub verification_uri: String,
+    /// The granted `scope`.
+    pub scope: String,
     counter: u64,
 }
 
@@ -107,6 +120,7 @@ impl Default for State {
             lifetime: 600,
             issue_refresh: true,
             access: None,
+            access_expires: None,
             refresh: None,
             rotated: Vec::new(),
             reuse: Vec::new(),
@@ -119,7 +133,12 @@ impl Default for State {
             device_expires: 600,
             auto_approve: true,
             cache: HashMap::new(),
+            cache_dir: None,
             issued: Vec::new(),
+            revoked: Vec::new(),
+            refreshes: 0,
+            verification_uri: "http://127.0.0.1/device".to_owned(),
+            scope: "cache:read cache:write".to_owned(),
             counter: 0,
         }
     }
@@ -159,16 +178,39 @@ impl State {
         self.issued.push(access.clone());
         self.issued.extend(refresh.clone());
         self.access = Some(access.clone());
+        self.access_expires = Some(Instant::now() + Duration::from_secs(self.lifetime));
         self.refresh = refresh.clone();
         let mut body = format!(
-            "{{\"access_token\":\"{access}\",\"token_type\":\"Bearer\",\"expires_in\":{},\"scope\":\"cache:read cache:write\"",
-            self.lifetime
+            "{{\"access_token\":\"{access}\",\"token_type\":\"Bearer\",\"expires_in\":{},\"scope\":\"{}\"",
+            self.lifetime, self.scope
         );
         if let Some(refresh) = refresh {
             body.push_str(&format!(",\"refresh_token\":\"{refresh}\""));
         }
         body.push('}');
         body
+    }
+
+    /// The current access token, if issued and unexpired.
+    pub fn current_access(&self) -> Option<&str> {
+        let live = self.access_expires.is_some_and(|at| Instant::now() <= at);
+        self.access.as_deref().filter(|_| live)
+    }
+
+    /// The control routes' state report, as a JSON object.
+    pub fn report(&self) -> String {
+        serde_json::json!({
+            "lifetime": self.lifetime,
+            "access": self.access,
+            "refresh": self.refresh,
+            "rotated": self.rotated,
+            "issued": self.issued,
+            "reuse": self.reuse,
+            "overlaps": self.overlaps,
+            "revoked": self.revoked,
+            "refreshes": self.refreshes,
+        })
+        .to_string()
     }
 
     /// Ends the current grant family.

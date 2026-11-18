@@ -1,0 +1,21 @@
+[dependencies]
+bytes = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+stockhouse-oauth-fake = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+stockhouse-proto = { workspace = true }
+
+[package]
+name = "stockhouse-fake-server-cli"
+publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true

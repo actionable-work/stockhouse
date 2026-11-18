@@ -6,6 +6,7 @@
 {
   pkgs,
   module,
+  fakeServer,
 }: let
   inherit (pkgs) lib;
   keyName = "stockhouse-vm-fixture-1";
@@ -15,30 +16,8 @@
   deniedHash = "00000000000000000000000000000403";
   failingHash = "00000000000000000000000000000500";
 
-  sharedFixture = pkgs.writeText "stockhouse-shared-fixture.py" ''
-    import http.server
-
-    LOG = "/var/lib/stockhouse-vm/shared-requests.log"
-    REPLIES = {"/nix-cache-info": 200, "/${deniedHash}.narinfo": 403, "/${failingHash}.narinfo": 500}
-
-
-    class Handler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self):
-            with open(LOG, "a") as log:
-                log.write(f"{self.path} {self.headers.get('Authorization', '-')}\n")
-            code = REPLIES.get(self.path, 404)
-            body = b"StoreDir: /nix/store\n" if code == 200 else b""
-            self.send_response(code)
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def log_message(self, *args):
-            pass
-
-
-    http.server.HTTPServer(("127.0.0.1", 8485), Handler).serve_forever()
-  '';
+  # Every fixture server is the Rust test binary `stockhouse-fake-server`.
+  fake = "${fakeServer}/bin/stockhouse-fake-server";
 
   # The server-backend variant: the private tier is the local fake protocol
   # v1 server, which the uploader and lease client talk to.
@@ -49,7 +28,7 @@
       after = ["stockhouse-vm-token.service"];
       requires = ["stockhouse-vm-token.service"];
       serviceConfig = {
-        ExecStart = "${pkgs.python3}/bin/python3 ${./upload_server.py} /var/lib/stockhouse-vm/private-token";
+        ExecStart = "${fake} upload --listen 127.0.0.1:8486 --root /var/lib/stockhouse-fake --token-file /var/lib/stockhouse-vm/private-token";
         StateDirectory = "stockhouse-fake";
       };
     };
@@ -108,7 +87,7 @@
       wantedBy = ["multi-user.target"];
       after = ["stockhouse-vm-token.service"];
       requires = ["stockhouse-vm-token.service"];
-      serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 ${sharedFixture}";
+      serviceConfig.ExecStart = "${fake} shared --listen 127.0.0.1:8485 --log /var/lib/stockhouse-vm/shared-requests.log --deny ${deniedHash} --fail ${failingHash}";
     };
 
     services.stockhouse = {
@@ -248,7 +227,7 @@
   '';
 
   # The sign-in node module: fake OAuth server and sealed server sign-in.
-  authModule = import ./auth.nix {inherit pkgs lib keyName publicKey;};
+  authModule = import ./auth.nix {inherit lib keyName publicKey fake;};
 
   nixVersions = {
     "nix-2_34" = pkgs.nixVersions.nix_2_34;

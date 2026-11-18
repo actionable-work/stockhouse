@@ -14,9 +14,11 @@
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
     modules = stockhouse.nixosModules;
+    # The VM fixture servers: a test-only package, never part of the module.
+    fakeServer = stockhouse.packages.${system}.stockhouse-fake-server;
     moduleArgs = {inherit pkgs nixpkgs modules;};
     vmArgs = {
-      inherit pkgs;
+      inherit pkgs fakeServer;
       module = modules.default;
     };
   in {
@@ -27,6 +29,11 @@
       // import ./module-auth-wrapper.test.nix moduleArgs
       // import ./module-upload.test.nix moduleArgs
       // import ./module-lease.test.nix moduleArgs
+      // import ./module-fake.test.nix (moduleArgs
+        // {
+          inherit fakeServer;
+          package = stockhouse.packages.${system}.stockhouse;
+        })
       // import ./vm-proxy.test.nix vmArgs
       // import ./vm-substitution.test.nix vmArgs
       // import ./vm-durability.test.nix vmArgs

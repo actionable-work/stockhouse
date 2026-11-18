@@ -2,7 +2,8 @@
 //!
 //! Test code only: it implements the public RFC 6749, 7636, 7009 and 8628
 //! behavior the client relies on, plus a bearer-protected cache prefix. It
-//! is not a model of any real server. Every token is synthetic.
+//! is not a model of any real server. Every token is synthetic. The VM
+//! stories run the same handlers through `stockhouse-fake-server oauth`.
 
 mod handlers;
 mod state;
@@ -71,6 +72,12 @@ device_authorization = \"{b}oauth/device\"\nrevocation = \"{b}oauth/revoke\"\n[s
             b = self.base
         )
     }
+}
+
+/// Serves `state` on `listener` until the process ends; the VM fake
+/// server's `oauth` mode.
+pub async fn serve_forever(listener: TcpListener, state: State) {
+    serve(listener, Arc::new(Mutex::new(state))).await;
 }
 
 async fn serve(listener: TcpListener, state: Arc<Mutex<State>>) {

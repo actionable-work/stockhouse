@@ -1,0 +1,143 @@
+group = "FAKE"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-FAKE-001"
+title = "The fake server is test-only"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "ubiquitous"
+system = "flake"
+action = "build `stockhouse-fake-server` as its own package used only by the tests subflake, with neither the `stockhouse` package nor any NixOS module unit or system package containing or running it"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-FAKE-002"
+title = "Fake server usage errors exit 2"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the fake server starts with a missing or unknown command or flag, a missing value or an unparsable address"
+system = "fake server"
+action = "print usage to stderr and exit 2 without serving"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-FAKE-003"
+title = "OAuth mode enforces access token lifetime"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a `/t/1/` request carries an expired, superseded or absent access token in `oauth` mode"
+system = "fake server"
+action = "answer 401, and answer the current unexpired token from the cache directory"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-FAKE-004"
+title = "OAuth mode serves the cache directory with containment"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "an authorized `/t/1/<rel>` request arrives in `oauth` mode"
+system = "fake server"
+action = "answer `StoreDir: /nix/store` for `nix-cache-info`, the file `<cache-dir>/<rel>` when it exists, and 404 when it is absent or `<rel>` has an empty, `.` or `..` component"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-FAKE-005"
+title = "OAuth mode control routes"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a `/__fake/approve`, `/__fake/revoke`, `/__fake/config` or `/__fake/state` request arrives in `oauth` mode"
+system = "fake server"
+action = "approve the named device code, end the grant family or set the lifetime of later tokens, and answer the state report with the current tokens or `null`, rotated, issued, reused, overlapping and revoked tokens and the refresh count"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-FAKE-006"
+title = "OAuth mode device codes wait for approval and refreshes overlap"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a device code is polled before approval, or two refreshes of one token arrive together, in `oauth` mode"
+system = "fake server"
+action = "answer `authorization_pending` until approval, and record the concurrent refresh token as an overlap"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-FAKE-007"
+title = "Upload mode requires the bearer and honours the outage control"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a request arrives in `upload` mode"
+system = "fake server"
+action = "answer `nix-cache-info` and 404 for `*.narinfo` without a bearer, answer 401 (logged) unless the bearer is the token file's trimmed content, and answer 503 `unavailable` while `control/down` exists"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-FAKE-008"
+title = "Upload mode declaration outcomes"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "an authorized declaration arrives in `upload` mode"
+system = "fake server"
+action = "answer `published` for a published upload, `present` for a held or `present-<hash>` path, 507 `quota_exceeded` under `control/quota`, 422 `missing_references` listing unheld references, 400 `bad_request` for a malformed body, and otherwise record and answer `open`, logging each outcome with the path hash"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-FAKE-009"
+title = "Upload mode verifies NARs"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "an authorized NAR body arrives in `upload` mode"
+system = "fake server"
+action = "answer 404 `unknown_upload` for an unknown upload, 400 `verification_failed` under `control/reject-<hash>` or when the size or `sha256:<nix32>` differs from the declaration, and otherwise publish the upload, hold its path and answer `published`"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-FAKE-010"
+title = "Upload mode stall and lost-reply controls"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a NAR body arrives in `upload` mode for a path with `control/stall-<hash>` or `control/drop-<hash>`"
+system = "fake server"
+action = "log `stalled` and read nothing until the stall file is removed, and for a drop publish the upload, remove the drop file, log `dropped` and close the connection without a reply"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-FAKE-011"
+title = "Upload mode state survives a restart"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the fake server restarts in `upload` mode on the same root"
+system = "fake server"
+action = "keep uploads, held paths, `requests.log` and `leases.log`, answering an earlier upload's status and treating its held path as present"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-FAKE-012"
+title = "Upload mode records lease renewals"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "an authorized `PUT leases/<machine>/<slot>` with a store path arrives in `upload` mode"
+system = "fake server"
+action = "append `<machine> <slot> <store path>` to `leases.log` and answer `renewed`"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-FAKE-013"
+title = "Shared mode records requests and answers per hash"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a `GET` arrives in `shared` mode"
+system = "fake server"
+action = "append the path and the `Authorization` header (or `-`) to the log, and answer 200 for `/nix-cache-info`, 403 for the denied hash's narinfo, 500 for the failing hash's narinfo and 404 otherwise"

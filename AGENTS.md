@@ -45,19 +45,21 @@ This repository is public from its first commit, and the server is private.
 | Path | Owns |
 | --- | --- |
 | `packages/rust/bins/stockhouse` | Thin binary: `main.rs` forwards `std::env::args()` to `stockhouse_cli::main` |
+| `packages/rust/bins/stockhouse-fake-server` | Test-only thin binary over `stockhouse_fake_server_cli::main`; its own flake package, used only by the tests subflake, never by the module or the `stockhouse` package |
 | `packages/rust/libs/proto` | `stockhouse-proto`: store paths, hashes, narinfo, nix-cache-info, signatures, integrity, upload identity |
 | `packages/rust/libs/credentials` | `stockhouse-credentials`: `Secret`, `CredentialSource` (with the `invalidate` retry hook), the shared `CredentialSpec` (`file`, `systemd`, `server`), file and systemd sources |
 | `packages/rust/libs/token_store` | `stockhouse-token-store`: the sealed (XChaCha20-Poly1305, systemd credential key) or explicit plaintext token store, atomic writes and the cross-process lock |
 | `packages/rust/libs/auth` | `stockhouse-auth`: sign-in configuration, token and revocation endpoint client, the refreshing `ServerCredential`, logout, status and the `source` factory every consumer uses |
 | `packages/rust/libs/signin` | `stockhouse-signin`: loopback PKCE and device sign-in flows (CLI only) |
-| `packages/rust/libs/oauth_fake` | `stockhouse-oauth-fake`: test-only fake OAuth server and private cache for component tests |
+| `packages/rust/libs/oauth_fake` | `stockhouse-oauth-fake`: test-only fake OAuth server and private cache for component tests, with the access-token lifetime, `/__fake/*` control routes and cache directory the VM stories use |
+| `packages/rust/libs/fake_server_cli` | `stockhouse-fake-server-cli`: test-only entry crate of the VM fixture servers: `oauth` (the shared OAuth fake), `upload` (disk-backed protocol v1 fake with control files) and `shared` (shared-tier fixture) |
 | `packages/rust/libs/proxy` | `stockhouse-proxy`: configuration, tier upstreams, lookup policy and the loopback HTTP server |
 | `packages/rust/libs/ingest` | `stockhouse-ingest`: durable queue, post-build hook, uploader passes, backends, rescan |
 | `packages/rust/libs/wire` | `stockhouse-wire`: upload and lease protocol v1 codecs (declarations, request paths, reply classification, machine identity, lease slots) |
 | `packages/rust/libs/upload` | `stockhouse-upload`: protocol v1 server upload backend (closure, verified NAR stream, reconciliation) and the lease client |
 | `packages/rust/libs/cli` | `stockhouse-cli`: command dispatch and exit status, including `login`, `logout`, `refresh`, `status --config` and `lease` |
 | `nix/module.nix` | The NixOS client module (`nixosModules.default`) |
-| `tests/` | Bloomery test subflake: module evaluation and NixOS VM tests; `tests/lib/fake_server.py` is the VM stories' fake OAuth server and private cache, and `tests/lib/upload_server.py` the fake upload and lease protocol v1 server |
+| `tests/` | Bloomery test subflake: module evaluation and NixOS VM tests; every VM fixture server runs `stockhouse-fake-server` (`oauth`, `upload` or `shared`), so all test tooling except the NixOS test driver's Python `testScript` is Rust covered by `bloomery check` |
 | `.bloomery/specs/CLIENT/` | Code-facing specifications (EARS requirements and designs) |
 | `docs/` | Slice records and follow-ups |
 

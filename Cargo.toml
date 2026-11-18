@@ -1,9 +1,11 @@
 [workspace]
 members = [
   "packages/rust/bins/stockhouse",
+  "packages/rust/bins/stockhouse-fake-server",
   "packages/rust/libs/auth",
   "packages/rust/libs/cli",
   "packages/rust/libs/credentials",
+  "packages/rust/libs/fake_server_cli",
   "packages/rust/libs/ingest",
   "packages/rust/libs/oauth_fake",
   "packages/rust/libs/proto",
@@ -55,6 +57,7 @@ sha2 = { default-features = false, version = "=0.11.1" }
 stockhouse-auth = { default-features = false, path = "packages/rust/libs/auth" }
 stockhouse-cli = { default-features = false, path = "packages/rust/libs/cli" }
 stockhouse-credentials = { default-features = false, path = "packages/rust/libs/credentials" }
+stockhouse-fake-server-cli = { default-features = false, path = "packages/rust/libs/fake_server_cli" }
 stockhouse-ingest = { default-features = false, path = "packages/rust/libs/ingest" }
 stockhouse-oauth-fake = { default-features = false, path = "packages/rust/libs/oauth_fake" }
 stockhouse-proto = { default-features = false, path = "packages/rust/libs/proto" }

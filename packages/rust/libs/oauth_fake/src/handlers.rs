@@ -71,7 +71,8 @@ pub(crate) async fn handle(state: &Arc<Mutex<State>>, parts: &Parts, body: &[u8]
         "/oauth/device" => device(&mut lock(state)),
         "/oauth/revoke" => revoke(&mut lock(state), &request),
         "/oauth/authorize" => authorize(&mut lock(state), &request),
-        path => cache(&lock(state), path, &request),
+        path if path.starts_with("/__fake/") => control(&mut lock(state), path, &request),
+        path => cache(state, path, &request),
     }
 }
 
@@ -101,6 +102,7 @@ async fn refresh(state: &Arc<Mutex<State>>, request: &Recorded) -> Reply {
     tokio::time::sleep(delay).await;
     let mut state = lock(state);
     *state.in_flight.entry(token.clone()).or_default() -= 1;
+    state.refreshes += 1;
     if state.refresh.as_deref() == Some(token.as_str()) {
         return reply(200, state.issue());
     }
@@ -135,7 +137,7 @@ fn device(state: &mut State) -> Reply {
     state
         .devices
         .insert(device_code.clone(), (user_code.clone(), approved));
-    let base = "http://127.0.0.1/device";
+    let base = state.verification_uri.clone();
     reply(
         200,
         format!(
@@ -160,6 +162,7 @@ fn device_poll(state: &mut State, request: &Recorded) -> Reply {
 
 fn revoke(state: &mut State, request: &Recorded) -> Reply {
     let token = request.field("token").unwrap_or_default();
+    state.revoked.push(token.to_owned());
     if state.refresh.as_deref() == Some(token) {
         state.revoke_family();
     }
@@ -179,8 +182,11 @@ fn authorize(state: &mut State, request: &Recorded) -> Reply {
     state
         .codes
         .insert(code.clone(), (challenge.to_owned(), redirect.to_owned()));
-    let state_param = request.field("state").unwrap_or_default();
-    let location = format!("{redirect}?code={code}&state={state_param}");
+    let query = form_urlencoded::Serializer::new(String::new())
+        .append_pair("code", &code)
+        .append_pair("state", request.field("state").unwrap_or_default())
+        .finish();
+    let location = format!("{redirect}?{query}");
     let mut response = reply(302, "");
     response
         .headers_mut()
@@ -188,17 +194,59 @@ fn authorize(state: &mut State, request: &Recorded) -> Reply {
     response
 }
 
-fn cache(state: &State, path: &str, request: &Recorded) -> Reply {
+/// The `/__fake/*` control routes; every one answers the state report.
+fn control(state: &mut State, path: &str, request: &Recorded) -> Reply {
+    match path {
+        "/__fake/approve" => {
+            let user = request.field("user_code").unwrap_or_default();
+            for (code, approved) in state.devices.values_mut() {
+                *approved |= code == user;
+            }
+        }
+        "/__fake/revoke" => state.revoke_family(),
+        "/__fake/config" => match request.field("lifetime").map(str::parse) {
+            Some(Ok(lifetime)) => state.lifetime = lifetime,
+            _ => return reply(400, ""),
+        },
+        _ => {}
+    }
+    reply(200, state.report())
+}
+
+/// A relative cache path with no empty, `.` or `..` component.
+fn contained(rel: &str) -> bool {
+    rel.split('/').all(|c| !matches!(c, "" | "." | ".."))
+}
+
+fn typed(status: u16, body: impl Into<Bytes>, content_type: &str) -> Reply {
+    let mut response = reply(status, body);
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, content_type.parse().expect("header"));
+    response
+}
+
+fn cache(state: &Arc<Mutex<State>>, path: &str, request: &Recorded) -> Reply {
     let Some(rest) = path.strip_prefix("/t/1/") else {
         return reply(404, "");
     };
-    let expected = state.access.as_ref().map(|a| format!("Bearer {a}"));
-    if expected.is_none() || request.authorization != expected {
-        return reply(401, "");
+    let (entry, dir) = {
+        let state = lock(state);
+        let expected = state.current_access().map(|a| format!("Bearer {a}"));
+        if expected.is_none() || request.authorization != expected {
+            return typed(401, "", "text/plain");
+        }
+        (state.cache.get(rest).cloned(), state.cache_dir.clone())
+    };
+    if let Some(body) = entry {
+        return reply(200, body);
     }
-    match state.cache.get(rest) {
-        Some(body) => reply(200, body.clone()),
-        None if rest == "nix-cache-info" => reply(200, "StoreDir: /nix/store\n"),
-        None => reply(404, ""),
+    if rest == "nix-cache-info" {
+        return typed(200, "StoreDir: /nix/store\n", "text/x-nix-cache-info");
+    }
+    let file = dir.filter(|_| contained(rest)).map(|d| d.join(rest));
+    match file.and_then(|f| std::fs::read(f).ok()) {
+        Some(body) => typed(200, body, "application/octet-stream"),
+        None => typed(404, "", "text/plain"),
     }
 }

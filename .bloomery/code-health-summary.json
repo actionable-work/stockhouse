@@ -2,6 +2,19 @@
   "algorithm_version": 2,
   "crates": [
     {
+      "manifest_path": "packages/rust/bins/stockhouse-fake-server/Cargo.toml",
+      "name": "stockhouse-fake-server",
+      "overall_score": 100.0,
+      "sloc": 3,
+      "subscores": {
+        "complexity": 0.0,
+        "crateSize": 0.0,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.0
+      }
+    },
+    {
       "manifest_path": "packages/rust/bins/stockhouse/Cargo.toml",
       "name": "stockhouse",
       "overall_score": 100.0,
@@ -54,6 +67,19 @@
       }
     },
     {
+      "manifest_path": "packages/rust/libs/fake_server_cli/Cargo.toml",
+      "name": "stockhouse-fake-server-cli",
+      "overall_score": 99.77,
+      "sloc": 690,
+      "subscores": {
+        "complexity": 0.11,
+        "crateSize": 0.0,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.13
+      }
+    },
+    {
       "manifest_path": "packages/rust/libs/ingest/Cargo.toml",
       "name": "stockhouse-ingest",
       "overall_score": 99.73,
@@ -70,7 +96,7 @@
       "manifest_path": "packages/rust/libs/oauth_fake/Cargo.toml",
       "name": "stockhouse-oauth-fake",
       "overall_score": 100.0,
-      "sloc": 462,
+      "sloc": 553,
       "subscores": {
         "complexity": 0.0,
         "crateSize": 0.0,
@@ -158,7 +184,7 @@
       }
     }
   ],
-  "input_digest": "1c6768411d4fc337a3345197bc143ed12ec58d06aa01c92fa2a1c6adce8b6c8d",
+  "input_digest": "10c712d79c70fa73cd2c47d2fe5753c8490c7c340f31a962c44bb6544a812cf9",
   "policy": {
     "scoring": {
       "crateSlocLimit": 1500,
@@ -182,15 +208,15 @@
   },
   "schema_version": 4,
   "workspace": {
-    "crate_count": 12,
-    "overall_score": 99.62,
-    "sloc": 9303,
+    "crate_count": 14,
+    "overall_score": 99.63,
+    "sloc": 10087,
     "subscores": {
-      "complexity": 0.23,
-      "crateSize": 0.11,
+      "complexity": 0.22,
+      "crateSize": 0.1,
       "duplication": 0.0,
       "nesting": 0.0,
-      "size": 0.05
+      "size": 0.06
     }
   }
 }
