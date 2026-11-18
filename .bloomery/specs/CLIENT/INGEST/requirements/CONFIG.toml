@@ -43,3 +43,25 @@ type = "event"
 trigger = "the `nix-copy` backend is configured without an absolute `file://` destination"
 system = "uploader configuration parser"
 action = "return `UploaderConfigError::UnsupportedDestination`"
+
+[[requirements]]
+id = "CLIENT-INGEST-CONFIG-005"
+title = "A server backend configuration loads"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "an uploader configuration with a `server` backend naming `base_url` and a `file` or `systemd` credential is parsed"
+system = "uploader configuration parser"
+action = "return the server backend with its base URL, credential and `nix`, `request_timeout_secs` 60 and `max_closure_paths` 50000 unless configured"
+
+[[requirements]]
+id = "CLIENT-INGEST-CONFIG-006"
+title = "Server backend configuration rejects bad fields and limits"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a `server` backend has an unknown field, no credential, a `request_timeout_secs` outside 1–300 or a zero `max_closure_paths`"
+system = "uploader configuration parser"
+action = "return `UploaderConfigError::Parse` or `UploaderConfigError::InvalidLimit` naming the field respectively"

@@ -43,3 +43,14 @@ type = "event"
 trigger = "a `sha256:` hash is parsed with a length other than 52 or 64, a character outside its encoding, or a non-canonical base-32 value with unused high bits set"
 system = "hash parser"
 action = "return `HashError::InvalidEncoding`"
+
+[[requirements]]
+id = "CLIENT-PROTO-HASH-005"
+title = "SRI SHA-256 parses only through its own parser"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a hash in SRI form `sha256-<base64>` is parsed"
+system = "hash parser"
+action = "decode it with `Sha256::parse_sri` when the payload is 44 characters of padded base64 of 32 bytes, return `HashError::UnsupportedAlgorithm` for another prefix or `HashError::InvalidEncoding` for another payload, and reject it from `Sha256::parse`"

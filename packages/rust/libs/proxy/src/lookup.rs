@@ -1,9 +1,13 @@
+use crate::body::ByteStream;
 use crate::config::{ProxyConfig, TierConfig, TierName, TierUrl};
 use crate::error::{ProxyError, ServeError};
 use crate::upstream::{Fetched, Upstream, UpstreamError};
+use bytes::Bytes;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use stockhouse_credentials::{CredentialSource, Secret};
+use stockhouse_auth::Source;
+use stockhouse_credentials::{CredentialSource, CredentialSpec, Secret};
 use stockhouse_proto::{NarInfo, NixCacheInfo, StorePathHash, TrustedKeys};
 
 const NARINFO_LIMIT: u64 = 1024 * 1024;
@@ -14,14 +18,37 @@ pub struct Tier {
     name: TierName,
     upstream: Upstream,
     keys: TrustedKeys,
-    credential: Option<Box<dyn CredentialSource>>,
+    credential: Option<Arc<dyn CredentialSource>>,
     cache_info_ok: AtomicBool,
 }
 
-/// A verified narinfo with the credential used to fetch it.
+/// The credential state of one proxy request: the secret in use and
+/// whether its one 401 retry has been spent.
+pub(crate) struct Attempt {
+    secret: Option<Secret>,
+    retried: bool,
+}
+
+/// A verified narinfo with the credential state used to fetch it.
 pub(crate) struct Resolved {
     pub(crate) narinfo: NarInfo,
-    pub(crate) auth: Option<Secret>,
+    pub(crate) attempt: Attempt,
+}
+
+fn build_source(
+    name: TierName,
+    url: &TierUrl,
+    spec: &CredentialSpec,
+) -> Result<Arc<dyn CredentialSource>, ServeError> {
+    let source = stockhouse_auth::source(Some(spec))
+        .map_err(|error| ServeError::Credential { tier: name, error })?;
+    if let (Source::Server(server), TierUrl::Http(tier_url)) = (&source, url) {
+        // Both are parsed URLs, so this compares normalized forms.
+        if server.private_tier() != tier_url {
+            return Err(ServeError::CredentialAudience { tier: name });
+        }
+    }
+    Ok(source.shared())
 }
 
 impl Tier {
@@ -34,14 +61,14 @@ impl Tier {
         let credential = config
             .credential
             .as_ref()
-            .map(|spec| stockhouse_credentials::source(Some(spec)));
-        let cache_info_ok = AtomicBool::new(false);
+            .map(|spec| build_source(config.name, &config.url, spec))
+            .transpose()?;
         Ok(Self {
             name: config.name,
             upstream,
             keys: config.keys.clone(),
             credential,
-            cache_info_ok,
+            cache_info_ok: AtomicBool::new(false),
         })
     }
 
@@ -52,7 +79,9 @@ impl Tier {
 
     fn fail(&self, error: UpstreamError) -> ProxyError {
         match error {
-            UpstreamError::Denied => ProxyError::Denied { tier: self.name },
+            UpstreamError::Denied | UpstreamError::Unauthorized => {
+                ProxyError::Denied { tier: self.name }
+            }
             reason => ProxyError::Unavailable {
                 tier: self.name,
                 reason,
@@ -60,28 +89,89 @@ impl Tier {
         }
     }
 
-    fn secret(&self) -> Result<Option<Secret>, ProxyError> {
-        let Some(source) = &self.credential else {
+    /// Resolves the credential on the blocking pool: it may block.
+    async fn secret(&self) -> Result<Option<Secret>, ProxyError> {
+        let Some(source) = self.credential.clone() else {
             return Ok(None);
         };
-        source
-            .credential()
+        let tier = self.name;
+        let resolved = tokio::task::spawn_blocking(move || source.credential())
+            .await
+            .unwrap_or(Err(stockhouse_credentials::CredentialError::Unreadable));
+        resolved
             .map(Some)
-            .map_err(|error| ProxyError::Credential {
-                tier: self.name,
-                error,
-            })
+            .map_err(|error| ProxyError::Credential { tier, error })
     }
 
-    async fn check_cache_info(&self, auth: Option<&Secret>) -> Result<(), ProxyError> {
+    /// After a 401: spends the one retry if the source offers a new
+    /// credential, replacing the attempt's secret.
+    async fn invalidated(&self, attempt: &mut Attempt) -> Result<bool, ProxyError> {
+        if attempt.retried {
+            return Ok(false);
+        }
+        let (Some(source), Some(sent)) = (self.credential.clone(), attempt.secret.take()) else {
+            return Ok(false);
+        };
+        attempt.retried = true;
+        let joined = tokio::task::spawn_blocking(move || {
+            let again = source.invalidate(&sent);
+            (again, sent)
+        })
+        .await;
+        let Ok((again, sent)) = joined else {
+            return Ok(false);
+        };
+        if again {
+            attempt.secret = self.secret().await?;
+        } else {
+            attempt.secret = Some(sent);
+        }
+        Ok(again)
+    }
+
+    async fn fetch(
+        &self,
+        attempt: &mut Attempt,
+        rel: &str,
+        limit: u64,
+    ) -> Result<Fetched<Bytes>, ProxyError> {
+        match self
+            .upstream
+            .fetch(rel, attempt.secret.as_ref(), limit)
+            .await
+        {
+            Err(UpstreamError::Unauthorized) if self.invalidated(attempt).await? => self
+                .upstream
+                .fetch(rel, attempt.secret.as_ref(), limit)
+                .await
+                .map_err(|e| self.fail(e)),
+            other => other.map_err(|e| self.fail(e)),
+        }
+    }
+
+    /// Opens a NAR, retrying a 401 before any byte is sent.
+    pub(crate) async fn open(
+        &self,
+        attempt: &mut Attempt,
+        rel: &str,
+    ) -> Result<Fetched<(ByteStream, Option<u64>)>, ProxyError> {
+        match self.upstream.open(rel, attempt.secret.as_ref()).await {
+            Err(UpstreamError::Unauthorized) if self.invalidated(attempt).await? => self
+                .upstream
+                .open(rel, attempt.secret.as_ref())
+                .await
+                .map_err(|e| self.fail(e)),
+            other => other.map_err(|e| self.fail(e)),
+        }
+    }
+
+    async fn check_cache_info(&self, attempt: &mut Attempt) -> Result<(), ProxyError> {
         if self.cache_info_ok.load(Ordering::Acquire) {
             return Ok(());
         }
         let fetched = self
-            .upstream
-            .fetch("nix-cache-info", auth, CACHE_INFO_LIMIT)
-            .await
-            .map_err(|e| self.fail(e))?;
+            .fetch(attempt, "nix-cache-info", CACHE_INFO_LIMIT)
+            .await?;
         let Fetched::Found(body) = fetched else {
             return Err(ProxyError::CacheInfoMissing { tier: self.name });
         };
@@ -98,15 +188,13 @@ impl Tier {
         &self,
         hash: &StorePathHash,
     ) -> Result<Option<Resolved>, ProxyError> {
-        let auth = self.secret()?;
-        self.check_cache_info(auth.as_ref()).await?;
+        let mut attempt = Attempt {
+            secret: self.secret().await?,
+            retried: false,
+        };
+        self.check_cache_info(&mut attempt).await?;
         let path = format!("{hash}.narinfo");
-        let fetched = self
-            .upstream
-            .fetch(&path, auth.as_ref(), NARINFO_LIMIT)
-            .await
-            .map_err(|e| self.fail(e))?;
-        let Fetched::Found(body) = fetched else {
+        let Fetched::Found(body) = self.fetch(&mut attempt, &path, NARINFO_LIMIT).await? else {
             return Ok(None);
         };
         let narinfo = NarInfo::parse(&body).map_err(|error| ProxyError::NarInfo {
@@ -122,15 +210,7 @@ impl Tier {
                 tier: self.name,
                 error,
             })?;
-        Ok(Some(Resolved { narinfo, auth }))
-    }
-
-    pub(crate) fn upstream(&self) -> &Upstream {
-        &self.upstream
-    }
-
-    pub(crate) fn fail_upstream(&self, error: UpstreamError) -> ProxyError {
-        self.fail(error)
+        Ok(Some(Resolved { narinfo, attempt }))
     }
 }
 

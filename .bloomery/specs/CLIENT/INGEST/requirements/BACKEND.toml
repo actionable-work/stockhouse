@@ -2,14 +2,14 @@ group = "BACKEND"
 
 [[requirements]]
 id = "CLIENT-INGEST-BACKEND-001"
-title = "The default backend defers to the server slice"
+title = "The default backend waits for a configured backend"
 manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
 trigger = "the `deferred` backend receives a job"
 system = "deferred backend"
-action = "return `Deferred` with a message naming P2.08 without contacting anything"
+action = "return `Deferred` with the message `no upload backend configured (set backend = \"server\")` without contacting anything"
 
 [[requirements]]
 id = "CLIENT-INGEST-BACKEND-002"

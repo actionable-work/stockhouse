@@ -69,6 +69,8 @@ pub enum ConfigError {
     CredentialOnFileTier(TierName),
     /// A credential over `http://` to a non-loopback host.
     CleartextCredential(TierName),
+    /// A `server` credential outside the private tier or with a relative path.
+    ServerCredential(TierName),
 }
 
 impl fmt::Display for ConfigError {
@@ -98,6 +100,10 @@ impl fmt::Display for ConfigError {
             Self::CleartextCredential(t) => write!(
                 f,
                 "proxy configuration: {t} credential would be sent in cleartext"
+            ),
+            Self::ServerCredential(t) => write!(
+                f,
+                "proxy configuration: {t} tier cannot use a server credential"
             ),
         }
     }
@@ -157,14 +163,7 @@ struct RawConfig {
 struct RawTier {
     url: String,
     trusted_keys: Vec<String>,
-    credential: Option<RawCredential>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "lowercase")]
-enum RawCredential {
-    File(PathBuf),
-    Systemd(String),
+    credential: Option<CredentialSpec>,
 }
 
 impl ProxyConfig {
@@ -205,12 +204,10 @@ impl ProxyConfig {
 fn tier(name: TierName, raw: RawTier) -> Result<TierConfig, ConfigError> {
     let url = tier_url(name, &raw.url)?;
     let keys = trusted_keys(name, &raw.trusted_keys)?;
-    let credential = raw.credential.map(|c| match c {
-        RawCredential::File(path) => CredentialSpec::File(path),
-        RawCredential::Systemd(name) => CredentialSpec::Systemd(name),
-    });
-    if credential.is_some() {
+    let credential = raw.credential;
+    if let Some(spec) = &credential {
         check_credential_placement(name, &url)?;
+        check_server_credential(name, spec)?;
     }
     Ok(TierConfig {
         name,
@@ -255,6 +252,21 @@ fn check_credential_placement(name: TierName, url: &TierUrl) -> Result<(), Confi
         }
         TierUrl::Http(_) => Ok(()),
     }
+}
+
+fn check_server_credential(name: TierName, spec: &CredentialSpec) -> Result<(), ConfigError> {
+    match spec {
+        CredentialSpec::Server(path) if name != TierName::Private || !normal_absolute(path) => {
+            Err(ConfigError::ServerCredential(name))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Absolute with no `.` or `..` component.
+fn normal_absolute(path: &std::path::Path) -> bool {
+    let bytes = path.as_os_str().as_encoded_bytes();
+    path.is_absolute() && !bytes.split(|&b| b == b'/').any(|s| s == b"." || s == b"..")
 }
 
 fn is_loopback_host(url: &Url) -> bool {

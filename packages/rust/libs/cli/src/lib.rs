@@ -2,6 +2,7 @@
 
 mod args;
 mod commands;
+mod session;
 
 use std::io::Write;
 use std::process::ExitCode;
@@ -16,8 +17,11 @@ const USAGE: &str = "usage: stockhouse <command>
   proxy --config <file>
   uploader --config <file> [--once]
   post-build-hook --queue <dir>
-  status --queue <dir>
-  login | logout | refresh
+  status --queue <dir> | status --config <auth.toml>
+  lease --config <file>
+  login --config <auth.toml> [--device]
+  logout --config <auth.toml>
+  refresh --config <auth.toml>
   --version";
 
 /// The binary entry point.

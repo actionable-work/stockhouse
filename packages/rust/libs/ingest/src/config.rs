@@ -2,6 +2,7 @@ use crate::worker::WorkerLimits;
 use serde::Deserialize;
 use std::fmt;
 use std::path::PathBuf;
+use stockhouse_credentials::CredentialSpec;
 use stockhouse_proto::{UnsupportedVersion, check_version};
 
 /// Why an uploader configuration was rejected.
@@ -52,6 +53,36 @@ pub enum BackendConfig {
         #[serde(default = "default_nix")]
         nix: PathBuf,
     },
+    /// Authenticated upload to the private tier with protocol v1.
+    Server(ServerBackendConfig),
+}
+
+/// The `server` backend's settings. The base URL is checked when the
+/// backend is built (`stockhouse-upload`).
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ServerBackendConfig {
+    /// The private tier base URL.
+    pub base_url: String,
+    /// Where the bearer credential lives.
+    pub credential: CredentialSpec,
+    /// The `nix` executable.
+    #[serde(default = "default_nix")]
+    pub nix: PathBuf,
+    /// Connect and per-request timeout base, seconds.
+    #[serde(default = "default_timeout")]
+    pub request_timeout_secs: u64,
+    /// The largest closure uploaded.
+    #[serde(default = "default_max_closure")]
+    pub max_closure_paths: usize,
+}
+
+fn default_timeout() -> u64 {
+    60
+}
+
+fn default_max_closure() -> usize {
+    50_000
 }
 
 /// Which store scanner to use.
@@ -110,6 +141,14 @@ impl UploaderConfig {
             return Err(UploaderConfigError::RelativeQueueDir);
         }
         config.check_limits()?;
+        if let BackendConfig::Server(server) = &config.backend {
+            if !(1..=300).contains(&server.request_timeout_secs) {
+                return Err(UploaderConfigError::InvalidLimit("request_timeout_secs"));
+            }
+            if server.max_closure_paths == 0 {
+                return Err(UploaderConfigError::InvalidLimit("max_closure_paths"));
+            }
+        }
         if let BackendConfig::NixCopy { destination, .. } = &config.backend {
             let absolute = destination
                 .strip_prefix("file://")

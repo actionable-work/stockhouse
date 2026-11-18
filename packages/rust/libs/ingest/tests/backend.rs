@@ -18,7 +18,9 @@ fn job() -> UploadJob {
 fn default_backend_defers_to_the_server_slice() {
     assert_eq!(
         DeferredUploader.upload(&job()),
-        UploadOutcome::Deferred("server upload requires P2.08".to_owned())
+        UploadOutcome::Deferred(
+            "no upload backend configured (set backend = \"server\")".to_owned()
+        )
     );
 }
 

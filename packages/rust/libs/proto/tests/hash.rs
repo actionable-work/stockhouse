@@ -56,3 +56,43 @@ fn bad_encodings_are_rejected() {
         );
     }
 }
+
+#[cfg_attr(any(), bloomery("CLIENT-PROTO-HASH-005"))]
+#[test]
+fn sri_parses_only_through_its_own_parser() {
+    use base64::Engine;
+    let sri = format!(
+        "sha256-{}",
+        base64::engine::general_purpose::STANDARD.encode(Sha256::digest(b"").bytes())
+    );
+    assert_eq!(
+        Sha256::parse_sri(&sri).unwrap(),
+        Sha256::parse(EMPTY_SHA256).unwrap()
+    );
+    assert_eq!(
+        Sha256::parse_sri("sha1-AAAA"),
+        Err(HashError::UnsupportedAlgorithm)
+    );
+    assert_eq!(
+        Sha256::parse_sri(EMPTY_SHA256),
+        Err(HashError::UnsupportedAlgorithm)
+    );
+    let short = base64::engine::general_purpose::STANDARD.encode([0u8; 31]);
+    for bad in [
+        &sri[..sri.len() - 1],
+        &format!("{sri}="),
+        &format!("sha256-{short}"),
+    ] {
+        assert_eq!(
+            Sha256::parse_sri(bad),
+            Err(HashError::InvalidEncoding),
+            "{bad}"
+        );
+    }
+    let bad_chars = format!("sha256-{}", "!".repeat(44));
+    assert_eq!(
+        Sha256::parse_sri(&bad_chars),
+        Err(HashError::InvalidEncoding)
+    );
+    assert_eq!(Sha256::parse(&sri), Err(HashError::UnsupportedAlgorithm));
+}

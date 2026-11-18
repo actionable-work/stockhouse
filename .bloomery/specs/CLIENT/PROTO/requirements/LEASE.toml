@@ -1,0 +1,78 @@
+group = "LEASE"
+
+[[requirements]]
+id = "CLIENT-PROTO-LEASE-001"
+title = "Machine identities are 32 lowercase hex characters"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a machine identity is parsed"
+system = "`MachineId` parser"
+action = "accept exactly 32 lowercase hex characters, render them unchanged, and return `MachineIdError::Invalid` for any other text"
+
+[[requirements]]
+id = "CLIENT-PROTO-LEASE-002"
+title = "Machine identities render from 16 bytes"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a machine identity is built from 16 bytes"
+system = "`MachineId::from_bytes`"
+action = "render the bytes as 32 lowercase hex characters that the parser accepts"
+
+[[requirements]]
+id = "CLIENT-PROTO-LEASE-003"
+title = "Lease slots are 1 to 10"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a lease slot is constructed"
+system = "`LeaseSlot::new`"
+action = "accept 1 to 10 and return `LeaseSlotError::OutOfRange` for any other number"
+
+[[requirements]]
+id = "CLIENT-PROTO-LEASE-004"
+title = "Lease paths are rendered from typed values"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "the path of a lease for a machine identity and slot is rendered"
+system = "lease path renderer"
+action = "return `leases/<MachineId>/<slot>` with the slot in decimal"
+
+[[requirements]]
+id = "CLIENT-PROTO-LEASE-005"
+title = "Lease requests render and parse strictly"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a lease request is rendered or parsed"
+system = "lease request codec"
+action = "render `{\"version\":1,\"store_path\":…}` in that key order, parse it back to an equal value, and return `LeaseRequestError::TooLarge` over 4 KiB, `Malformed` for an unknown, missing or mistyped key, `UnsupportedVersion` for a version other than 1 and `InvalidField` for an invalid store path"
+
+[[requirements]]
+id = "CLIENT-PROTO-LEASE-006"
+title = "Lease replies classify by status and body"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a reply to a lease renewal is classified"
+system = "lease reply classifier"
+action = "map 200 `renewed` to `Renewed`, 422 `unknown_path`, 409 `conflict` and 400 `bad_request` to `Refused` with that reason, 401 to `Unauthorized` and 503 to `Unavailable` without reading their bodies"
+
+[[requirements]]
+id = "CLIENT-PROTO-LEASE-007"
+title = "Lease replies outside the protocol are unexpected"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a lease reply has a status and body pair outside the lease table, an unknown key, or a body over 64 KiB"
+system = "lease reply classifier"
+action = "return `ReplyError::Unexpected` with the status, or `ReplyError::TooLarge` for the oversized body"

@@ -2,8 +2,9 @@
 //!
 //! This crate encodes the public Nix binary-cache facts the client relies on:
 //! store paths, hashes, narinfo, `nix-cache-info`, Ed25519 narinfo signatures
-//! and incremental content integrity. It performs no I/O and has no
-//! dependency on any server implementation.
+//! and incremental content integrity. The upload and lease protocol v1
+//! codecs, which build on these types, live in `stockhouse-wire`. It
+//! performs no I/O and has no dependency on any server implementation.
 
 mod cache_info;
 mod hash;

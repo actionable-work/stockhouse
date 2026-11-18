@@ -1,0 +1,254 @@
+group = "GRANT"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-001"
+title = "PKCE uses S256 with fresh random values"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "a loopback login starts"
+system = "loopback login"
+action = "generate a fresh 32-byte random `state` and `code_verifier`, each base64url without padding, and send `code_challenge` = base64url(SHA-256(`code_verifier`)) with `code_challenge_method=S256`, never the verifier"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-002"
+title = "The loopback listener binds an ephemeral port on 127.0.0.1"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "a loopback login starts"
+system = "loopback login"
+action = "bind only `127.0.0.1` on a kernel-chosen ephemeral port and use `http://127.0.0.1:<port>/callback` as the redirect URI"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-003"
+title = "The authorization URL carries the request parameters"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the loopback listener is bound"
+system = "loopback login"
+action = "print the authorization endpoint with `response_type=code`, `client_id`, `redirect_uri`, `scope`, `state`, `code_challenge` and `code_challenge_method=S256` appended to its existing query"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-004"
+title = "A valid callback exchanges the code with the verifier"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the first `GET /callback` carries the expected `state` and a well-formed `code`"
+system = "loopback login"
+action = "answer 200 with a static page, close the listener and send `grant_type=authorization_code`, `code`, `redirect_uri`, `client_id` and `code_verifier` to the token endpoint, storing the returned token set"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-005"
+title = "State mismatches abort the login"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the first `GET /callback` has no `state` or a different `state`"
+system = "loopback login"
+action = "answer 400, close the listener and fail with `StateMismatch` without contacting the token endpoint"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-006"
+title = "Authorization errors abort the login"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the first `GET /callback` carries an `error` parameter with the expected `state`"
+system = "loopback login"
+action = "close the listener and fail with `AuthorizationDenied` carrying only the known-code classification, without contacting the token endpoint or reporting `error_description`"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-007"
+title = "The callback is one shot"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "a `GET /callback` request has been answered"
+system = "loopback login"
+action = "close the listener so that no further connection is accepted"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-008"
+title = "Unrelated listener requests do not end the wait"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the loopback listener receives a request for another path, a request with a method other than GET, or a connection that sends no request"
+system = "loopback login"
+action = "answer 404 or 405 respectively without echoing the request and keep waiting for `/callback`, serving connections concurrently so that an idle connection does not delay the callback"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-009"
+title = "The loopback wait is bounded"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "no `GET /callback` arrives within 300 s"
+system = "loopback login"
+action = "close the listener and fail with `LoginTimeout`"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-010"
+title = "Device login shows the verification URI and user code"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the device authorization endpoint returns a valid response"
+system = "device login"
+action = "print `verification_uri`, `user_code` and any `verification_uri_complete` to stdout and never print or log the `device_code`"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-011"
+title = "Malformed device responses are refused"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the device authorization response lacks a field, has an out-of-range `expires_in` or `interval`, a verification URI that is not `https://` or loopback-IP `http://` or has a byte outside visible ASCII, or a user code with a control character"
+system = "device login"
+action = "fail with `DeviceResponse` without polling"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-012"
+title = "authorization_pending keeps the interval"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the token endpoint answers `authorization_pending` while polling"
+system = "device login"
+action = "wait the current interval (default 5 s) before the next poll"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-013"
+title = "slow_down adds five seconds"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the token endpoint answers `slow_down` while polling"
+system = "device login"
+action = "add 5 s to the interval for that and every later poll"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-014"
+title = "Denied or expired device grants stop polling"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the token endpoint answers `access_denied` or `expired_token`, or the next poll would be sent after the device response's `expires_in`"
+system = "device login"
+action = "stop polling and fail with `DeviceDenied` or `DeviceExpired` respectively"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-015"
+title = "Token responses are validated"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the token endpoint answers 200"
+system = "token endpoint client"
+action = "accept it only with a `Bearer` `token_type`, an `access_token` and optional `refresh_token` of 1–4096 visible ASCII bytes and an integer `expires_in` of 1–86 400, setting `expires_at` from the request send time, and otherwise classify it `InvalidResponse`"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-016"
+title = "Token endpoint failures are classified"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the token endpoint answers a non-200 status, a redirect, an oversized body or fails in transport"
+system = "token endpoint client"
+action = "classify 400/401 by known `error` code, 429, 5xx, redirects and transport failures as `Transient`, and other statuses and bodies over 65 536 bytes as `InvalidResponse`, following no redirect"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-017"
+title = "Endpoint requests carry no Authorization header"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the client sends a token, device authorization or revocation request"
+system = "token endpoint client"
+action = "send a form body with `client_id` and no `Authorization` header"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-018"
+title = "Re-login replaces and revokes the previous grant"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "a login succeeds while a token set with a different refresh token is stored"
+system = "login"
+action = "write the new token set under the lock and then revoke the replaced refresh token once, reporting a failed revocation as a warning without failing the login"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-019"
+title = "Transient device polling failures back off"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the token endpoint answers 429, a 5xx status or `temporarily_unavailable`, a redirect, or fails in transport while polling"
+system = "device login"
+action = "add 5 s to the interval, without raising it beyond 60 s or lowering an interval already above 60 s, and keep polling"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-020"
+title = "Listener responses are not cached or referred"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the loopback listener answers any request"
+system = "loopback login"
+action = "send `Cache-Control: no-store` and `Referrer-Policy: no-referrer` with a static body that echoes nothing"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-021"
+title = "Login preflights the store before contacting the server"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "a loopback or device login starts while the store directory is unsafe, the sealing key is unavailable or malformed, or the lock cannot be acquired"
+system = "login"
+action = "fail with that `StoreError` without binding a listener or sending any request"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-022"
+title = "Login replaces an untrusted store without revoking"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "a login succeeds while the store reads as `Corrupt` or `Mismatch`"
+system = "login"
+action = "overwrite the store with the new token set and send no revocation request"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-023"
+title = "Sign-in requests ignore environment proxies"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "an OAuth endpoint is contacted while `HTTP_PROXY`, `HTTPS_PROXY` or `ALL_PROXY` is set"
+system = "endpoint client"
+action = "connect to the endpoint directly and send nothing through the environment-configured proxy"

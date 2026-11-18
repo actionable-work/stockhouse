@@ -16,7 +16,9 @@ const CHUNK: usize = 64 * 1024;
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum UpstreamError {
-    /// 401, 403, or a file permission error.
+    /// 401: the credential was rejected.
+    Unauthorized,
+    /// 403, or a file permission error.
     Denied,
     /// A 3xx response; redirects are never followed.
     Redirect(u16),
@@ -31,6 +33,7 @@ pub enum UpstreamError {
 impl fmt::Display for UpstreamError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Unauthorized => f.write_str("unauthorized"),
             Self::Denied => f.write_str("denied"),
             Self::Redirect(code) => write!(f, "redirect {code} refused"),
             Self::Status(code) => write!(f, "status {code}"),
@@ -60,6 +63,7 @@ impl Upstream {
     pub(crate) fn http(base: Url, timeout: Duration) -> Result<Self, reqwest::Error> {
         let mut builder = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
+            .no_proxy()
             .connect_timeout(timeout)
             .read_timeout(timeout);
         if base.scheme() == "http" {
@@ -142,7 +146,8 @@ async fn open_http(
     match response.status() {
         StatusCode::OK => {}
         StatusCode::NOT_FOUND => return Ok(Fetched::NotFound),
-        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => return Err(UpstreamError::Denied),
+        StatusCode::UNAUTHORIZED => return Err(UpstreamError::Unauthorized),
+        StatusCode::FORBIDDEN => return Err(UpstreamError::Denied),
         s if s.is_redirection() => return Err(UpstreamError::Redirect(s.as_u16())),
         s => return Err(UpstreamError::Status(s.as_u16())),
     }

@@ -1,0 +1,111 @@
+group = "CONFIG"
+
+[[requirements]]
+id = "CLIENT-CREDS-CONFIG-001"
+title = "A valid sign-in configuration loads"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "an auth configuration with version 1, a valid server origin, endpoints on that origin, a client ID, scopes, a private tier and a store is parsed"
+system = "auth configuration parser"
+action = "return the server, the four endpoint URLs, client ID, scopes, private tier, request timeout (default 30 s) and store mode, directory and key credential name"
+
+[[requirements]]
+id = "CLIENT-CREDS-CONFIG-002"
+title = "Unknown sign-in configuration versions are rejected"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "an auth configuration declares a version other than 1"
+system = "auth configuration parser"
+action = "return `AuthConfigError::UnsupportedVersion`"
+
+[[requirements]]
+id = "CLIENT-CREDS-CONFIG-003"
+title = "Sign-in configuration cannot hold secrets"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "an auth configuration contains an unknown field, such as a `token` or `refresh_token` value, a wrong type or a missing field"
+system = "auth configuration parser"
+action = "return `AuthConfigError::Parse` without including any field value in the error text"
+
+[[requirements]]
+id = "CLIENT-CREDS-CONFIG-004"
+title = "The server origin is a clean secure origin"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the `server` value is not `https://` or loopback-IP `http://`, or has a path other than `/`, a query, a fragment or userinfo"
+system = "auth configuration parser"
+action = "return `AuthConfigError::InvalidServer`"
+
+[[requirements]]
+id = "CLIENT-CREDS-CONFIG-005"
+title = "Endpoints are secure URLs without fragments"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "an endpoint is not `https://` or loopback-IP `http://`, has a fragment or userinfo, or is the token, device authorization or revocation endpoint with a query"
+system = "auth configuration parser"
+action = "return `AuthConfigError::InvalidEndpoint` naming the endpoint"
+
+[[requirements]]
+id = "CLIENT-CREDS-CONFIG-006"
+title = "Endpoints share the server origin"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "an endpoint's scheme, host or port differs from the `server` origin"
+system = "auth configuration parser"
+action = "return `AuthConfigError::ForeignEndpoint` naming the endpoint"
+
+[[requirements]]
+id = "CLIENT-CREDS-CONFIG-007"
+title = "The private tier is a secure base URL"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "`private_tier` is not `https://` or loopback-IP `http://`, has a query, fragment or userinfo, or does not end in `/`"
+system = "auth configuration parser"
+action = "return `AuthConfigError::InvalidPrivateTier`"
+
+[[requirements]]
+id = "CLIENT-CREDS-CONFIG-008"
+title = "Client ID and scopes are well formed"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "`client_id` is empty, longer than 255 bytes or outside visible ASCII, or `scopes` is empty, repeats a scope or has a character outside the RFC 6749 scope-token set"
+system = "auth configuration parser"
+action = "return `AuthConfigError::InvalidClientId` or `AuthConfigError::InvalidScope` respectively"
+
+[[requirements]]
+id = "CLIENT-CREDS-CONFIG-009"
+title = "The token store location and mode are explicit and safe"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the store directory is relative, has a `.` or `..` component or is under `/nix/store`, `sealed` mode lacks a valid systemd credential name, or `file` mode names a key credential"
+system = "auth configuration parser"
+action = "return `AuthConfigError::InvalidStore`"
+
+[[requirements]]
+id = "CLIENT-CREDS-CONFIG-010"
+title = "Request timeouts are bounded"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "`request_timeout_secs` is 0 or greater than 300"
+system = "auth configuration parser"
+action = "return `AuthConfigError::InvalidTimeout`"

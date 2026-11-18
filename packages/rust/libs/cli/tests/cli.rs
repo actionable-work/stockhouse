@@ -137,6 +137,8 @@ fn no_argument_accepts_a_credential() {
         vec!["proxy", "--config", "/x", "--token", "s3cr3t"],
         vec!["uploader", "--token=s3cr3t", "--config", "/x"],
         vec!["login", "--password", "s3cr3t"],
+        vec!["login", "--config", "/x", "--token", "s3cr3t"],
+        vec!["refresh", "--config", "/x", "--refresh-token=s3cr3t"],
     ] {
         let (code, out, err) = cli(&args, None);
         assert_eq!(code, 2, "{args:?}");
@@ -144,16 +146,6 @@ fn no_argument_accepts_a_credential() {
             !format!("{out}{err}").contains("s3cr3t"),
             "values are never echoed"
         );
-    }
-}
-
-#[cfg_attr(any(), bloomery("CLIENT-INTEGRATION-CLI-004"))]
-#[test]
-fn deferred_login_commands_fail_clearly() {
-    for command in ["login", "logout", "refresh"] {
-        let (code, _, err) = cli(&[command], None);
-        assert_eq!(code, 1);
-        assert!(err.contains("P2.06"), "{err}");
     }
 }
 
@@ -213,3 +205,122 @@ fn hook_always_exits_successfully() {
     );
     assert_eq!(guard_hook(|| panic!("simulated hook panic")), 0);
 }
+
+fn lease_config(dir: &std::path::Path, base: &str) -> PathBuf {
+    let text = format!(
+        "version = 1\nbase_url = \"{base}\"\nmachine_id_file = \"{}\"\n[credential]\nsystemd = \"private\"\n",
+        dir.join("machine-id").display()
+    );
+    let path = dir.join("lease.toml");
+    std::fs::write(&path, text).unwrap();
+    path
+}
+
+#[cfg_attr(any(), bloomery("CLIENT-INTEGRATION-CLI-013"))]
+#[test]
+fn the_lease_command_dispatches_to_the_lease_client() {
+    let dir = temp_dir();
+    let config = lease_config(&dir, "http://127.0.0.1:9/t/1/");
+    // No systemd credential directory here: the lease client reports the
+    // credential error and exits 75 without contacting anything.
+    let (code, _, err) = cli(&["lease", "--config", config.to_str().unwrap()], None);
+    assert_eq!(code, 75, "{err}");
+    assert!(
+        err.contains("stockhouse lease: credential unavailable"),
+        "{err}"
+    );
+    assert!(dir.join("machine-id").exists());
+    for args in [
+        vec!["lease"],
+        vec!["lease", "--config"],
+        vec!["lease", "--config", "x", "--once"],
+    ] {
+        assert_eq!(cli(&args, None).0, 2, "{args:?}");
+    }
+}
+
+#[cfg_attr(any(), bloomery("CLIENT-INTEGRATION-CLI-014"))]
+#[test]
+fn invalid_server_endpoints_are_configuration_errors() {
+    let dir = temp_dir();
+    let queue = dir.join("queue");
+    let text = std::fs::read_to_string(uploader_config(&queue)).unwrap().replace(
+        "[backend]\nkind = \"deferred\"\n",
+        "[backend]\nkind = \"server\"\nbase_url = \"http://cache.example.invalid/t/1/\"\n[backend.credential]\nsystemd = \"private\"\n",
+    );
+    let config = dir.join("server.toml");
+    std::fs::write(&config, text).unwrap();
+    let (code, _, err) = cli(
+        &["uploader", "--config", config.to_str().unwrap(), "--once"],
+        None,
+    );
+    assert_eq!(code, 2);
+    assert!(err.contains("cleartext"), "{err}");
+    assert!(!queue.exists());
+    let lease = lease_config(&dir, "http://cache.example.invalid/t/1/");
+    let (code, _, err) = cli(&["lease", "--config", lease.to_str().unwrap()], None);
+    assert_eq!(code, 2);
+    assert!(err.contains("cleartext"), "{err}");
+    assert!(!dir.join("machine-id").exists());
+    // A `server` credential whose sign-in configuration is missing, or is
+    // for another private tier, is a configuration error too.
+    let auth = dir.join("auth.toml");
+    std::fs::write(
+        &auth,
+        AUTH.replace("@TIER@", "http://127.0.0.1:8486/t/2/")
+            .replace("@DIR@", &dir.display().to_string()),
+    )
+    .unwrap();
+    for (credential, needle) in [
+        (
+            format!("server = \"{}\"", dir.join("absent.toml").display()),
+            "credential",
+        ),
+        (
+            format!("server = \"{}\"", auth.display()),
+            "another private tier",
+        ),
+    ] {
+        let lease = lease_config(&dir, "http://127.0.0.1:8486/t/1/");
+        let text = std::fs::read_to_string(&lease)
+            .unwrap()
+            .replace("systemd = \"private\"", &credential);
+        std::fs::write(&lease, text).unwrap();
+        let (code, _, err) = cli(&["lease", "--config", lease.to_str().unwrap()], None);
+        assert_eq!(code, 2, "{err}");
+        assert!(err.contains(needle), "{err}");
+        let uploader = dir.join("server-auth.toml");
+        let text = std::fs::read_to_string(&config)
+            .unwrap()
+            .replace(
+                "http://cache.example.invalid/t/1/",
+                "http://127.0.0.1:8486/t/1/",
+            )
+            .replace("systemd = \"private\"", &credential);
+        std::fs::write(&uploader, text).unwrap();
+        let (code, _, err) = cli(
+            &["uploader", "--config", uploader.to_str().unwrap(), "--once"],
+            None,
+        );
+        assert_eq!(code, 2, "{err}");
+        assert!(err.contains(needle), "{err}");
+        assert!(!queue.exists());
+    }
+}
+
+const AUTH: &str = r#"version = 1
+server = "https://example.invalid/"
+client_id = "stockhouse-cli"
+scopes = ["cache:read", "cache:write"]
+private_tier = "@TIER@"
+
+[endpoints]
+authorization = "https://example.invalid/oauth/authorize"
+token = "https://example.invalid/oauth/token"
+device_authorization = "https://example.invalid/oauth/device"
+revocation = "https://example.invalid/oauth/revoke"
+
+[store]
+mode = "file"
+directory = "@DIR@/auth"
+"#;

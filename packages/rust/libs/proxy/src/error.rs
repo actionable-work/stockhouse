@@ -143,6 +143,29 @@ pub enum ServeError {
     },
     /// The HTTP client for a tier could not be built.
     Client(String),
+    /// A tier's server credential configuration could not be loaded.
+    Credential {
+        /// The tier.
+        tier: TierName,
+        /// Why.
+        error: stockhouse_auth::AuthConfigError,
+    },
+    /// A server credential is for a different tier URL.
+    CredentialAudience {
+        /// The tier.
+        tier: TierName,
+    },
+}
+
+impl ServeError {
+    /// Whether this is a configuration problem (exit 2) rather than a
+    /// runtime one.
+    pub fn is_configuration(&self) -> bool {
+        matches!(
+            self,
+            Self::Credential { .. } | Self::CredentialAudience { .. }
+        )
+    }
 }
 
 impl fmt::Display for ServeError {
@@ -151,6 +174,11 @@ impl fmt::Display for ServeError {
             Self::AddressInUse { addr } => write!(f, "listen address {addr} is already in use"),
             Self::Bind { addr, error } => write!(f, "cannot listen on {addr}: {error}"),
             Self::Client(message) => write!(f, "cannot build upstream client: {message}"),
+            Self::Credential { tier, error } => write!(f, "{tier} tier credential: {error}"),
+            Self::CredentialAudience { tier } => write!(
+                f,
+                "{tier} tier credential: sign-in configuration is for a different private tier"
+            ),
         }
     }
 }

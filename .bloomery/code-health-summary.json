@@ -15,38 +15,51 @@
       }
     },
     {
-      "manifest_path": "packages/rust/libs/cli/Cargo.toml",
-      "name": "stockhouse-cli",
-      "overall_score": 99.52,
-      "sloc": 307,
+      "manifest_path": "packages/rust/libs/auth/Cargo.toml",
+      "name": "stockhouse-auth",
+      "overall_score": 99.97,
+      "sloc": 951,
       "subscores": {
-        "complexity": 0.48,
+        "complexity": 0.03,
         "crateSize": 0.0,
         "duplication": 0.0,
         "nesting": 0.0,
         "size": 0.0
+      }
+    },
+    {
+      "manifest_path": "packages/rust/libs/cli/Cargo.toml",
+      "name": "stockhouse-cli",
+      "overall_score": 99.09,
+      "sloc": 482,
+      "subscores": {
+        "complexity": 0.75,
+        "crateSize": 0.0,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.16
       }
     },
     {
       "manifest_path": "packages/rust/libs/credentials/Cargo.toml",
       "name": "stockhouse-credentials",
-      "overall_score": 99.77,
-      "sloc": 328,
+      "overall_score": 98.23,
+      "sloc": 362,
       "subscores": {
-        "complexity": 0.23,
+        "complexity": 1.61,
         "crateSize": 0.0,
         "duplication": 0.0,
         "nesting": 0.0,
-        "size": 0.0
+        "size": 0.16
       }
     },
     {
       "manifest_path": "packages/rust/libs/ingest/Cargo.toml",
       "name": "stockhouse-ingest",
-      "overall_score": 99.69,
-      "sloc": 1245,
+      "overall_score": 99.73,
+      "sloc": 1497,
       "subscores": {
-        "complexity": 0.29,
+        "complexity": 0.25,
         "crateSize": 0.0,
         "duplication": 0.0,
         "nesting": 0.0,
@@ -54,10 +67,23 @@
       }
     },
     {
+      "manifest_path": "packages/rust/libs/oauth_fake/Cargo.toml",
+      "name": "stockhouse-oauth-fake",
+      "overall_score": 100.0,
+      "sloc": 462,
+      "subscores": {
+        "complexity": 0.0,
+        "crateSize": 0.0,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.0
+      }
+    },
+    {
       "manifest_path": "packages/rust/libs/proto/Cargo.toml",
       "name": "stockhouse-proto",
       "overall_score": 99.96,
-      "sloc": 1111,
+      "sloc": 1127,
       "subscores": {
         "complexity": 0.04,
         "crateSize": 0.0,
@@ -69,10 +95,62 @@
     {
       "manifest_path": "packages/rust/libs/proxy/Cargo.toml",
       "name": "stockhouse-proxy",
-      "overall_score": 100.0,
-      "sloc": 1041,
+      "overall_score": 99.95,
+      "sloc": 1161,
       "subscores": {
-        "complexity": 0.0,
+        "complexity": 0.05,
+        "crateSize": 0.0,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.0
+      }
+    },
+    {
+      "manifest_path": "packages/rust/libs/signin/Cargo.toml",
+      "name": "stockhouse-signin",
+      "overall_score": 99.94,
+      "sloc": 515,
+      "subscores": {
+        "complexity": 0.06,
+        "crateSize": 0.0,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.0
+      }
+    },
+    {
+      "manifest_path": "packages/rust/libs/token_store/Cargo.toml",
+      "name": "stockhouse-token-store",
+      "overall_score": 99.89,
+      "sloc": 612,
+      "subscores": {
+        "complexity": 0.11,
+        "crateSize": 0.0,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.0
+      }
+    },
+    {
+      "manifest_path": "packages/rust/libs/upload/Cargo.toml",
+      "name": "stockhouse-upload",
+      "overall_score": 98.87,
+      "sloc": 1532,
+      "subscores": {
+        "complexity": 0.29,
+        "crateSize": 0.64,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.2
+      }
+    },
+    {
+      "manifest_path": "packages/rust/libs/wire/Cargo.toml",
+      "name": "stockhouse-wire",
+      "overall_score": 99.82,
+      "sloc": 599,
+      "subscores": {
+        "complexity": 0.18,
         "crateSize": 0.0,
         "duplication": 0.0,
         "nesting": 0.0,
@@ -80,7 +158,7 @@
       }
     }
   ],
-  "input_digest": "aeea2723de495060971194b0d5848fe8afbcdb39f6bc3ff83460e48472783bbb",
+  "input_digest": "1c6768411d4fc337a3345197bc143ed12ec58d06aa01c92fa2a1c6adce8b6c8d",
   "policy": {
     "scoring": {
       "crateSlocLimit": 1500,
@@ -104,15 +182,15 @@
   },
   "schema_version": 4,
   "workspace": {
-    "crate_count": 6,
-    "overall_score": 99.84,
-    "sloc": 4035,
+    "crate_count": 12,
+    "overall_score": 99.62,
+    "sloc": 9303,
     "subscores": {
-      "complexity": 0.16,
-      "crateSize": 0.0,
+      "complexity": 0.23,
+      "crateSize": 0.11,
       "duplication": 0.0,
       "nesting": 0.0,
-      "size": 0.01
+      "size": 0.05
     }
   }
 }

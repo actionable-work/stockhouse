@@ -1,0 +1,188 @@
+group = "STORE"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-001"
+title = "A sealed token set round-trips without plaintext on disk"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "a token set is written in `sealed` mode and read back with the same key and binding"
+system = "token store"
+action = "return an equal token set while the file `tokens.sealed` contains neither token's bytes"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-002"
+title = "Sealing uses XChaCha20-Poly1305 with a fresh nonce"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "a token set is sealed"
+system = "token store"
+action = "write the magic `SHTKSL01`, the 32-byte binding, a fresh 24-byte random nonce and the XChaCha20-Poly1305 ciphertext with the magic and binding as associated data, so two writes of the same set differ"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-003"
+title = "Tampered or wrongly keyed stores are refused"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "a sealed store is truncated, has altered bytes, a wrong magic, or is read with a different key"
+system = "token store"
+action = "return `StoreError::Corrupt` and leave the file unchanged"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-004"
+title = "A store bound to another configuration is refused"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "a stored token set was written for a different token endpoint, client ID or private tier"
+system = "token store"
+action = "return `StoreError::Mismatch` and leave the file unchanged"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-005"
+title = "The sealing key comes from a systemd credential"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "the store is opened in `sealed` mode"
+system = "token store"
+action = "read the key through `SystemdCredential`, returning `StoreError::KeyUnavailable` when it is not loaded and `StoreError::KeyMalformed` unless it is exactly 64 lowercase hex characters"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-006"
+title = "Plaintext storage is used only when configured"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "the configuration's store mode is `file`"
+system = "token store"
+action = "write the token set JSON to `tokens.json` with mode `0600`, and never write `tokens.json` in `sealed` mode"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-007"
+title = "Writes are atomic"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "a token set is written"
+system = "token store"
+action = "write a new `O_EXCL` mode `0600` temporary file in the store directory, `fsync` it, rename it over the store file, remove the other mode's file and then `fsync` the directory, leaving the previous store unchanged and no temporary file when any step fails"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-008"
+title = "Switching modes leaves no stale copy"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "a token set is written or deleted in one mode while the other mode's store file exists"
+system = "token store"
+action = "remove the other mode's store file"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-009"
+title = "Unsafe store files are refused"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "the store file is a symbolic link, not a regular file, owned by another UID, has a group or other permission bit, or exceeds 65 536 bytes"
+system = "token store"
+action = "return `StoreError::Symlink`, `NotRegularFile`, `WrongOwner`, `PermissionsTooOpen` or `TooLarge` respectively without parsing it"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-010"
+title = "Unsafe store directories are refused"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "the store directory is missing, a symbolic link, not a directory, owned by another UID or has a group or other permission bit"
+system = "token store"
+action = "return `StoreError::DirectoryMissing` or `StoreError::DirectoryUnsafe` without creating, reading or writing anything"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-011"
+title = "An absent store means signed out"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "the store directory is safe and the configured mode's store file does not exist"
+system = "token store"
+action = "return no token set"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-012"
+title = "Malformed token sets are refused"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "a decrypted or plaintext token set is not JSON, has an unknown field, a version other than 1, a binding differing from the header, or a token that is empty, longer than 4096 bytes or outside visible ASCII"
+system = "token store"
+action = "return `StoreError::Corrupt`"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-013"
+title = "Deleting removes every copy"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "the store is deleted"
+system = "token store"
+action = "remove both `tokens.sealed` and `tokens.json`, succeeding when neither exists"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-014"
+title = "Writers hold an exclusive lock"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "a second holder requests the store lock while the first holds it"
+system = "token store lock"
+action = "make the second wait until the first guard is dropped, or return `StoreError::LockTimeout` after the configured wait without reading or writing the store"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-015"
+title = "A crashed lock holder does not wedge the store"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "a process holding the store lock exits without releasing it"
+system = "token store lock"
+action = "let the next requester acquire the lock immediately"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-016"
+title = "Stale temporary files are removed"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "a writer acquires the lock while `.tokens.*.tmp` files from a crashed writer remain"
+system = "token store"
+action = "remove them before writing"
+
+[[requirements]]
+id = "CLIENT-CREDS-STORE-017"
+title = "Unsafe lock files are refused"
+manual = false
+design = "design/store.md"
+[requirements.ears]
+type = "event"
+trigger = "the lock file is a symbolic link, not a regular file, owned by another UID or has a group or other permission bit"
+system = "token store lock"
+action = "return `StoreError::Symlink`, `NotRegularFile`, `WrongOwner` or `PermissionsTooOpen` respectively without locking, reading or writing the store"

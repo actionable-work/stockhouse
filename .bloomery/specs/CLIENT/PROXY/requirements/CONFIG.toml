@@ -109,3 +109,25 @@ type = "event"
 trigger = "a proxy configuration contains an unknown field, such as a `token` value"
 system = "proxy configuration parser"
 action = "return `ConfigError::Parse`"
+
+[[requirements]]
+id = "CLIENT-PROXY-CONFIG-011"
+title = "Server credentials belong to the private tier"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a tier other than `private` declares a `server` credential, or a `server` credential path is relative or has a `.` or `..` component"
+system = "proxy configuration parser"
+action = "return `ConfigError::ServerCredential` naming the tier"
+
+[[requirements]]
+id = "CLIENT-PROXY-CONFIG-012"
+title = "The access token is only for its own tier"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "the proxy binds with a `server` credential whose sign-in configuration cannot be loaded or names a `private_tier` that, compared as a parsed normalized URL, differs from the tier's `url`"
+system = "proxy"
+action = "fail with `ServeError::Credential` or `ServeError::CredentialAudience` naming the tier before listening"

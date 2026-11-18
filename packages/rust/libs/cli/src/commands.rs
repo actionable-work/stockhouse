@@ -4,15 +4,16 @@ use std::io::Write;
 use std::panic::{AssertUnwindSafe, UnwindSafe, catch_unwind};
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use stockhouse_credentials::{DeferredGrantFlow, GrantFlow};
 use stockhouse_ingest::{
     BackendConfig, DeferredUploader, NixCopyUploader, NixPathInfoScanner, NoScanner, Queue,
     Scanner, ScannerConfig, Uploader, UploaderConfig, Worker, hook,
 };
 use stockhouse_proto::PROTOCOL_VERSION;
 use stockhouse_proxy::ProxyConfig;
+use stockhouse_upload::lease::{LeaseConfig, effective_uid, run_lease};
+use stockhouse_upload::{ServerEndpoint, ServerUploader};
 
-const EXIT_FAILURE: u8 = 1;
+pub(crate) const EXIT_FAILURE: u8 = 1;
 
 pub(crate) fn dispatch(
     parsed: Parsed,
@@ -29,7 +30,10 @@ pub(crate) fn dispatch(
             );
             0
         }
-        Parsed::Grant(command) => grant(command, err),
+        Parsed::Login { config, device } => crate::session::login(&config, device, out, err),
+        Parsed::Logout { config } => crate::session::logout(&config, out, err),
+        Parsed::Refresh { config } => crate::session::refresh(&config, out, err),
+        Parsed::SessionStatus { config } => crate::session::status(&config, out, err),
         Parsed::Status { queue } => status(&queue, out, err),
         Parsed::Hook { queue } => {
             let out_paths = env("OUT_PATHS").unwrap_or_default();
@@ -39,6 +43,7 @@ pub(crate) fn dispatch(
         }
         Parsed::Proxy { config } => proxy(&config, err),
         Parsed::Uploader { config, once } => uploader(&config, once, err),
+        Parsed::Lease { config } => lease(&config, err),
     }
 }
 
@@ -52,22 +57,6 @@ fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
-}
-
-fn grant(command: &str, err: &mut dyn Write) -> u8 {
-    let flow = DeferredGrantFlow;
-    let result = match command {
-        "login" => flow.login(),
-        "logout" => flow.logout(),
-        _ => flow.refresh(),
-    };
-    match result {
-        Ok(()) => 0,
-        Err(error) => {
-            let _ = writeln!(err, "stockhouse {command}: {error}");
-            EXIT_FAILURE
-        }
-    }
 }
 
 fn status(queue: &Path, out: &mut dyn Write, err: &mut dyn Write) -> u8 {
@@ -124,17 +113,48 @@ fn proxy(path: &Path, err: &mut dyn Write) -> u8 {
             }
             Err(error) => {
                 let _ = writeln!(err, "stockhouse proxy: {error}");
-                EXIT_FAILURE
+                if error.is_configuration() {
+                    EXIT_USAGE
+                } else {
+                    EXIT_FAILURE
+                }
             }
         }
     })
 }
 
-fn backend(config: &BackendConfig) -> Box<dyn Uploader> {
-    match config {
-        BackendConfig::Deferred => Box::new(DeferredUploader),
-        BackendConfig::NixCopy { destination, nix } => {
+/// Validates a `server` backend's endpoint before anything else is touched.
+fn server_endpoint(config: &BackendConfig) -> Result<Option<ServerEndpoint>, String> {
+    let BackendConfig::Server(server) = config else {
+        return Ok(None);
+    };
+    ServerEndpoint::from_spec(
+        &server.base_url,
+        &server.credential,
+        server.request_timeout_secs,
+    )
+    .map(Some)
+    .map_err(|e| e.to_string())
+}
+
+fn backend(
+    config: &BackendConfig,
+    endpoint: Option<ServerEndpoint>,
+    queue: &Queue,
+) -> Box<dyn Uploader> {
+    match (config, endpoint) {
+        (BackendConfig::Deferred, _) => Box::new(DeferredUploader),
+        (BackendConfig::NixCopy { destination, nix }, _) => {
             Box::new(NixCopyUploader::new(nix.clone(), destination.clone()))
+        }
+        (BackendConfig::Server(server), Some(endpoint)) => Box::new(ServerUploader::new(
+            endpoint,
+            server.nix.clone(),
+            server.max_closure_paths,
+            queue.clone(),
+        )),
+        (BackendConfig::Server(_), None) => {
+            unreachable!("server_endpoint builds the endpoint of every server backend")
         }
     }
 }
@@ -157,6 +177,13 @@ fn uploader(path: &Path, once: bool, err: &mut dyn Write) -> u8 {
             return EXIT_USAGE;
         }
     };
+    let endpoint = match server_endpoint(&config.backend) {
+        Ok(endpoint) => endpoint,
+        Err(error) => {
+            let _ = writeln!(err, "stockhouse uploader: {error}");
+            return EXIT_USAGE;
+        }
+    };
     let queue = match Queue::create(&config.queue_dir, config.max_pending) {
         Ok(queue) => queue,
         Err(error) => {
@@ -164,7 +191,8 @@ fn uploader(path: &Path, once: bool, err: &mut dyn Write) -> u8 {
             return EXIT_FAILURE;
         }
     };
-    let (backend, scanner) = (backend(&config.backend), scanner(&config.scanner));
+    let backend = backend(&config.backend, endpoint, &queue);
+    let scanner = scanner(&config.scanner);
     let mut worker = Worker::new(queue, backend.as_ref(), scanner.as_ref(), config.limits());
     loop {
         if let Err(error) = worker.pass(now(), err) {
@@ -177,5 +205,25 @@ fn uploader(path: &Path, once: bool, err: &mut dyn Write) -> u8 {
             return 0;
         }
         std::thread::sleep(Duration::from_secs(config.poll_interval_secs));
+    }
+}
+
+fn lease(path: &Path, err: &mut dyn Write) -> u8 {
+    let Some(text) = read_config(path, err) else {
+        return EXIT_USAGE;
+    };
+    let config = match LeaseConfig::parse(&text) {
+        Ok(config) => config,
+        Err(error) => {
+            let _ = writeln!(err, "stockhouse lease: {error}");
+            return EXIT_USAGE;
+        }
+    };
+    match run_lease(&config, effective_uid(), err) {
+        Ok(code) => code,
+        Err(error) => {
+            let _ = writeln!(err, "stockhouse lease: {error}");
+            EXIT_USAGE
+        }
     }
 }

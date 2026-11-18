@@ -135,3 +135,75 @@ fn nix_copy_requires_a_local_file_destination() {
         );
     }
 }
+
+fn server(extra: &str) -> String {
+    let head = VALID.split("[backend]").next().unwrap();
+    format!(
+        "{head}[backend]\nkind = \"server\"\nbase_url = \"https://cache.example.invalid/t/1/\"\n{extra}\n[scanner]\nkind = \"none\"\n"
+    )
+}
+
+#[cfg_attr(any(), bloomery("CLIENT-INGEST-CONFIG-005"))]
+#[test]
+fn server_backend_configuration_loads() {
+    use stockhouse_credentials::CredentialSpec;
+    let config =
+        UploaderConfig::parse(&server("[backend.credential]\nsystemd = \"private\"\n")).unwrap();
+    let BackendConfig::Server(backend) = config.backend else {
+        panic!("not a server backend");
+    };
+    assert_eq!(backend.base_url, "https://cache.example.invalid/t/1/");
+    assert_eq!(
+        backend.credential,
+        CredentialSpec::Systemd("private".into())
+    );
+    assert_eq!(backend.nix, PathBuf::from("nix"));
+    assert_eq!(
+        (backend.request_timeout_secs, backend.max_closure_paths),
+        (60, 50_000)
+    );
+    let custom = server(
+        "nix = \"/bin/nix\"\nrequest_timeout_secs = 5\nmax_closure_paths = 7\n[backend.credential]\nfile = \"/run/keys/t\"\n",
+    );
+    let BackendConfig::Server(backend) = UploaderConfig::parse(&custom).unwrap().backend else {
+        panic!("not a server backend");
+    };
+    assert_eq!(
+        backend.credential,
+        CredentialSpec::File("/run/keys/t".into())
+    );
+    assert_eq!(backend.nix, PathBuf::from("/bin/nix"));
+    assert_eq!(
+        (backend.request_timeout_secs, backend.max_closure_paths),
+        (5, 7)
+    );
+}
+
+#[cfg_attr(any(), bloomery("CLIENT-INGEST-CONFIG-006"))]
+#[test]
+fn server_backend_configuration_rejects_bad_fields_and_limits() {
+    let cred = "[backend.credential]\nsystemd = \"private\"\n";
+    for bad in [
+        server(&format!("extra = 1\n{cred}")),
+        server(""),
+        server("[backend.credential]\ntoken = \"x\"\n"),
+    ] {
+        assert!(
+            matches!(
+                UploaderConfig::parse(&bad),
+                Err(UploaderConfigError::Parse(_))
+            ),
+            "{bad}"
+        );
+    }
+    for (line, field) in [
+        ("request_timeout_secs = 0\n", "request_timeout_secs"),
+        ("request_timeout_secs = 301\n", "request_timeout_secs"),
+        ("max_closure_paths = 0\n", "max_closure_paths"),
+    ] {
+        assert_eq!(
+            UploaderConfig::parse(&server(&format!("{line}{cred}"))),
+            Err(UploaderConfigError::InvalidLimit(field))
+        );
+    }
+}

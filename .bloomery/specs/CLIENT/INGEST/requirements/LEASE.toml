@@ -1,0 +1,133 @@
+group = "LEASE"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-001"
+title = "A valid lease configuration loads"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a lease configuration with version 1, a base URL, a credential, an absolute `machine_id_file` and optional paths, timeout and extra slots is parsed"
+system = "lease configuration parser"
+action = "return every field with `current_system` `/run/current-system`, `system_profile` `/nix/var/nix/profiles/system` and timeout 60 unless configured"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-002"
+title = "Lease configuration rejects bad input"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a lease configuration has a syntax error, an unknown or missing field, another version, a relative path, an extra slot outside 3–10 or repeated, a timeout outside 1–300 seconds or an invalid endpoint"
+system = "lease configuration parser"
+action = "return `LeaseConfigError::Parse`, `UnsupportedVersion`, `RelativePath`, `InvalidSlot`, `InvalidLimit` or `Endpoint` respectively"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-003"
+title = "The machine identity is created once"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the lease command runs and `machine_id_file` does not exist"
+system = "lease client"
+action = "write 16 random bytes as 32 lowercase hex characters and a newline with mode 0600 by staged hard link, and use the identity read back from the file"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-004"
+title = "The machine identity is reused"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the lease command runs again, including after a reboot"
+system = "lease client"
+action = "use the identity already in `machine_id_file` without rewriting it"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-005"
+title = "An unusable machine identity file fails closed"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "`machine_id_file` is a symbolic link or not a regular file, is owned by another user, has group or other permission bits, or does not hold exactly 32 lowercase hex characters and a newline"
+system = "lease client"
+action = "return `LeaseError::MachineId` naming the check, send no request and leave the file unchanged"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-006"
+title = "Slot 1 is the current system"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the lease command runs"
+system = "lease client"
+action = "renew slot 1 with the store path `current_system` resolves to"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-007"
+title = "Slot 2 is the newest other system generation"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "system profile generation links exist"
+system = "lease client"
+action = "renew slot 2 with the target of the largest-numbered `<system_profile>-<N>-link` whose target differs from slot 1, and skip slot 2 when there is none"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-008"
+title = "Unresolvable slots are skipped"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a slot's path does not resolve or resolves outside the store"
+system = "lease client"
+action = "skip that slot with one log line and renew the other slots"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-009"
+title = "Lease renewals use the protocol path and body"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a slot is renewed"
+system = "lease client"
+action = "send `PUT leases/<machine-id>/<slot>` with `Content-Type: application/json` and `{\"version\":1,\"store_path\":…}` under the server endpoint rules"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-010"
+title = "A failing slot does not stop the others"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a slot is refused, answered 503 (including a full machine table) or fails in transport or by timeout"
+system = "lease client"
+action = "log the slot and the code or failure and still renew every later slot"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-011"
+title = "Lease exit status reports the run"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the lease command finishes"
+system = "lease client"
+action = "exit 0 when every slot was renewed or skipped, 75 when any slot was refused or failed or any credential error occurred, 1 for a machine identity error and 2 for a configuration error"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-012"
+title = "Lease runs are idempotent"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the lease command runs twice with the same system"
+system = "lease client"
+action = "send the same requests both times and change no local state other than creating a missing machine identity"

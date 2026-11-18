@@ -6,8 +6,9 @@ description: |
   The open-source Stockhouse client: versioned public protocol types, a
   loopback-only substitution proxy over private, shared and public caches,
   a durable bounded post-build ingestion queue, credential sources and the
-  NixOS/systemd module. Server authentication, grants and authenticated
-  upload are deferred to the server slices that provide them.
+  NixOS/systemd module. Server sign-in is an OAuth 2.0 public client
+  (loopback PKCE and device flow) with a sealed token store and refreshing
+  credentials for the private tier.
 ---
 
 # Stockhouse Linux Cache Client
@@ -29,9 +30,13 @@ Supported systems are recorded in
 
 | Item | Waits on |
 | --- | --- |
-| Browser/loopback PKCE and device login, logout, refresh-family rotation, refresh races, protected token storage | P2.06 grants |
-| Authenticated server narinfo/NAR fetch, the real credential exchange replacing the static bearer placeholder, current-status outage semantics from the server | P2.06, P2.08 |
-| Authenticated server upload (sessions, quota reservation, uncertain-reply reconciliation with the server) behind the `Uploader` interface | P2.07, P2.08 |
+| End-to-end sign-in, refresh rotation and authenticated narinfo/NAR fetch against a real server (the client side is qualified against this repository's fake server) | that server's own drill |
+| Recovering a refresh whose reply was lost after the server rotated the token (the client may then be signed out and must log in again) | later client slice |
+| Resending a refresh token whose request got no reply may trip server-side reuse detection (no grace window is required by the protocol), signing the client out | later client slice |
+| Per-user sign-in and per-user isolation of private-tier substitution (sign-in is per machine) | later client slice |
+| End-to-end upload and lease evidence against a real server (protocol v1 upload, quota and uncertain-reply reconciliation are implemented and qualified against a local fake server) | that server's own drill |
+| Chunk-level upload deduplication, upload ranges or resume | later client slice |
+| A persistent 401 (or quota exhaustion) consumes upload attempts, so a record can fail permanently after about `maxAttempts × backoffMax`; it could defer instead | later client slice |
 | Server NixOS module integration | private server modules (P2.11) |
 | Agent or keyring credential sources beyond systemd credentials and owner-only files | later client slice |
 | Reconciling `stockhouse-proto` with the private P2.08a server types | follow-up after P2.08a |

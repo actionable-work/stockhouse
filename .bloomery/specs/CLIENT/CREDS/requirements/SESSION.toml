@@ -1,0 +1,67 @@
+group = "SESSION"
+
+[[requirements]]
+id = "CLIENT-CREDS-SESSION-001"
+title = "Logout revokes the refresh token then deletes"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "logout runs while a token set is stored"
+system = "logout"
+action = "under the lock, revoke only the refresh token at the revocation endpoint with `token`, `token_type_hint=refresh_token` and `client_id`, then delete the store and report success when it answered 200, or report that nothing was revoked when the set has no refresh token"
+
+[[requirements]]
+id = "CLIENT-CREDS-SESSION-002"
+title = "Logout deletes even when revocation fails"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "the refresh-token revocation request answers a status other than 200, a redirect or fails in transport"
+system = "logout"
+action = "delete the store anyway, send no retry, and report `RevocationFailed` with its classification"
+
+[[requirements]]
+id = "CLIENT-CREDS-SESSION-003"
+title = "Logout without tokens contacts nothing"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "logout runs while no token set is stored"
+system = "logout"
+action = "report that the client is not signed in and send no request"
+
+[[requirements]]
+id = "CLIENT-CREDS-SESSION-004"
+title = "Logout cannot be undone by a concurrent refresh"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "a refresh needs the lock while logout holds it"
+system = "logout"
+action = "make the refresh find no store after logout releases the lock and return `CredentialError::SignedOut` without sending a request"
+
+[[requirements]]
+id = "CLIENT-CREDS-SESSION-005"
+title = "Status reports the session without tokens"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "status runs"
+system = "session status"
+action = "report `signed_in`, `expires_at`, `expires_in_secs`, `refreshable`, `scope` and the store mode, or the store error kind, reading the store without the lock or network and never including a token, the binding or the key"
+
+[[requirements]]
+id = "CLIENT-CREDS-SESSION-006"
+title = "Logout discards an untrusted store without revoking"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "logout runs while the store reads as `Corrupt` or `Mismatch`"
+system = "logout"
+action = "delete the store without sending any request and report that nothing was revoked"
