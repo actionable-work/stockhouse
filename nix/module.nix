@@ -177,14 +177,64 @@
     // lib.mapAttrs tierConfig tiers);
 
   nix = "${config.nix.package}/bin/nix";
+
+  # Server upload and leases use the private tier as the server. Its
+  # credential wiring is defined once and shared by the uploader and lease
+  # units: with server sign-in, the signed-in token (`auth.unitCredential`);
+  # otherwise the systemd credential loaded from the private tier's runtime
+  # credential file.
+  isServer = cfg.uploader.backend == "server";
+  privateTier = cfg.proxy.private;
+  privateCredential =
+    if auth.enable
+    then unitCredential
+    else {
+      toml = {systemd = "private";};
+      serviceConfig.LoadCredential = ["private:${privateTier.credentialFile}"];
+      unitConfig = {};
+    };
+  privateUrlSafe = privateTier != null && secureUrl privateTier.url && lib.hasSuffix "/" privateTier.url;
+  # Hardening makes the file system read-only, so the uploader may write only
+  # its queue and, for `nix-copy`, the local destination (plus sign-in paths).
+  # The `-` prefix lets the unit start before a path exists: the default
+  # queue is created by the uploader inside its state directory.
+  uploaderWritable = map (path: "-${path}") ([cfg.uploader.queueDir]
+    ++ lib.optional (cfg.uploader.backend == "nix-copy" && cfg.uploader.nixCopyDestination != null)
+    (lib.removePrefix "file://" cfg.uploader.nixCopyDestination));
+  # Shared by the uploader and lease units.
+  hardening = {
+    ProtectSystem = "strict";
+    ProtectHome = true;
+    PrivateTmp = true;
+    NoNewPrivileges = true;
+    RestrictAddressFamilies = ["AF_INET" "AF_INET6" "AF_UNIX"];
+  };
+  machineIdFile = "/var/lib/stockhouse/machine-id";
+
+  serverBackend = {
+    kind = "server";
+    base_url = privateTier.url;
+    inherit nix;
+    credential = privateCredential.toml;
+  };
+
+  leaseConfig = toml.generate "stockhouse-lease.toml" {
+    version = 1;
+    base_url = privateTier.url;
+    machine_id_file = machineIdFile;
+    credential = privateCredential.toml;
+    extra = map (e: {inherit (e) slot path;}) cfg.lease.extraSlots;
+  };
+  leaseSlots = map (e: e.slot) cfg.lease.extraSlots;
+
   uploaderConfig = toml.generate "stockhouse-uploader.toml" {
     version = 1;
     queue_dir = cfg.uploader.queueDir;
     max_pending = cfg.uploader.maxPending;
     max_attempts = cfg.uploader.maxAttempts;
     batch_size = 64;
-    backoff_base_secs = 5;
-    backoff_max_secs = 3600;
+    backoff_base_secs = cfg.uploader.backoffBase;
+    backoff_max_secs = cfg.uploader.backoffMax;
     poll_interval_secs = cfg.uploader.pollInterval;
     rescan_interval_secs = cfg.uploader.rescanInterval;
     backend =
@@ -194,6 +244,8 @@
         destination = cfg.uploader.nixCopyDestination;
         inherit nix;
       }
+      else if isServer
+      then serverBackend
       else {kind = "deferred";};
     scanner =
       if cfg.uploader.scanner == "nix-path-info"
@@ -330,6 +382,16 @@ in {
         default = 30;
         description = "Priority advertised in the proxy's nix-cache-info.";
       };
+      narinfoCacheNegativeTtl = mkOption {
+        type = types.ints.unsigned;
+        default = 60;
+        description = ''
+          Seconds Nix caches a narinfo miss when `configureNix` is set (Nix's
+          own default is 3600). A path the uploader has published but the
+          server has not yet signed reads as a miss; a short TTL lets it
+          substitute soon after instead of an hour later.
+        '';
+      };
       configureNix = mkOption {
         type = types.bool;
         default = true;
@@ -368,9 +430,19 @@ in {
         description = "Seconds between periodic store rescans.";
       };
       backend = mkOption {
-        type = types.enum ["deferred" "nix-copy"];
+        type = types.enum ["deferred" "nix-copy" "server"];
         default = "deferred";
-        description = "`deferred` keeps records pending until server upload exists (P2.08); `nix-copy` copies to a local file:// cache for development and tests.";
+        description = "`deferred` keeps records pending; `nix-copy` copies to a local file:// cache for development and tests; `server` uploads each built closure to the private tier (`proxy.private`) with protocol v1.";
+      };
+      backoffBase = mkOption {
+        type = types.ints.positive;
+        default = 5;
+        description = "First retry backoff, seconds.";
+      };
+      backoffMax = mkOption {
+        type = types.ints.positive;
+        default = 3600;
+        description = "Retry backoff cap, seconds; quota exhaustion waits this long.";
       };
       nixCopyDestination = mkOption {
         type = types.nullOr types.str;
@@ -386,6 +458,36 @@ in {
         type = types.bool;
         default = true;
         description = "Install the post-build hook that records built paths.";
+      };
+    };
+
+    lease = {
+      enable = mkOption {
+        type = types.bool;
+        default = cfg.uploader.enable && cfg.uploader.backend == "server";
+        defaultText = lib.literalExpression ''config.services.stockhouse.uploader.enable && config.services.stockhouse.uploader.backend == "server"'';
+        description = "Renew this machine's leases on the server's system roots on boot, hourly, daily and after activation (requires the uploader with the `server` backend).";
+      };
+      randomizedDelaySec = mkOption {
+        type = types.ints.unsigned;
+        default = 600;
+        description = "Random delay added to the boot, hourly and daily lease renewals, so a fleet does not renew at once.";
+      };
+      extraSlots = mkOption {
+        type = types.listOf (types.submodule {
+          options = {
+            slot = mkOption {
+              type = types.ints.between 3 10;
+              description = "Lease slot, 3 to 10.";
+            };
+            path = mkOption {
+              type = types.str;
+              description = "Absolute path that resolves to the store path to keep.";
+            };
+          };
+        });
+        default = [];
+        description = "Operator-defined lease slots 3 to 10.";
       };
     };
   };
@@ -438,6 +540,10 @@ in {
       };
 
       nix.settings = mkIf cfg.proxy.configureNix {
+        narinfo-cache-negative-ttl = lib.mkDefault cfg.proxy.narinfoCacheNegativeTtl;
+        # The proxy answers 503 when signed out or the server is down; without
+        # fallback Nix fails the build instead of building locally.
+        fallback = lib.mkDefault true;
         substituters = lib.mkForce [proxyUrl];
         trusted-public-keys = lib.concatMap (tier: tier.trustedKeys) (lib.attrValues tiers);
       };
@@ -468,30 +574,113 @@ in {
       };
     })
 
+    (mkIf cfg.lease.enable {
+      assertions = [
+        {
+          assertion = cfg.uploader.enable && isServer;
+          message = "services.stockhouse.lease.enable needs services.stockhouse.uploader.enable with backend = \"server\".";
+        }
+        {
+          assertion = lib.length (lib.unique leaseSlots) == lib.length leaseSlots;
+          message = "services.stockhouse.lease.extraSlots must use distinct slots.";
+        }
+        {
+          assertion = lib.all (e: lib.hasPrefix "/" e.path) cfg.lease.extraSlots;
+          message = "services.stockhouse.lease.extraSlots paths must be absolute.";
+        }
+      ];
+    })
+
     (mkIf cfg.uploader.enable {
       assertions = [
         {
           assertion = cfg.uploader.backend != "nix-copy" || (cfg.uploader.nixCopyDestination != null && lib.hasPrefix "file:///" cfg.uploader.nixCopyDestination);
           message = "services.stockhouse.uploader.nixCopyDestination must be an absolute file:// URL.";
         }
+        {
+          assertion = !isServer || (privateUrlSafe && (auth.enable || privateTier.credentialFile != null));
+          message = "services.stockhouse.uploader.backend = \"server\" needs services.stockhouse.proxy.private with an https:// (or loopback-IP http://) URL ending in /, and services.stockhouse.auth.enable or a private credentialFile.";
+        }
+        {
+          assertion = cfg.uploader.backoffBase <= cfg.uploader.backoffMax;
+          message = "services.stockhouse.uploader.backoffBase must not exceed backoffMax.";
+        }
       ];
 
       systemd.services.stockhouse-uploader = {
         description = "Stockhouse post-build ingestion uploader";
         wantedBy = ["multi-user.target"];
-        after = ["nix-daemon.socket"];
-        serviceConfig = {
-          ExecStart = "${cfg.package}/bin/stockhouse uploader --config ${uploaderConfig}";
-          User = "stockhouse";
-          Group = "stockhouse";
-          StateDirectory = "stockhouse";
-          StateDirectoryMode = "0755";
-          Restart = "always";
-          RestartSec = 5;
-        };
+        after = ["nix-daemon.socket"] ++ lib.optionals isServer (privateCredential.unitConfig.after or []);
+        requires = lib.optionals isServer (privateCredential.unitConfig.requires or []);
+        serviceConfig =
+          hardening
+          // lib.optionalAttrs isServer privateCredential.serviceConfig
+          // {
+            ReadWritePaths = uploaderWritable ++ lib.optionals isServer (privateCredential.serviceConfig.ReadWritePaths or []);
+            ExecStart = "${cfg.package}/bin/stockhouse uploader --config ${uploaderConfig}";
+            User = "stockhouse";
+            Group = "stockhouse";
+            StateDirectory = "stockhouse";
+            StateDirectoryMode = "0755";
+            Restart = "always";
+            RestartSec = 5;
+          };
       };
 
       nix.settings.post-build-hook = mkIf cfg.uploader.configureHook hookScript;
+    })
+
+    (mkIf (cfg.uploader.enable && cfg.lease.enable && isServer) {
+      # Never wanted by a target, so never part of boot or activation; the
+      # timers below and the activation snippet only queue it.
+      systemd.services.stockhouse-lease = {
+        description = "Stockhouse lease renewal";
+        after = ["network-online.target"] ++ (privateCredential.unitConfig.after or []);
+        wants = ["network-online.target"];
+        requires = privateCredential.unitConfig.requires or [];
+        serviceConfig =
+          hardening
+          // privateCredential.serviceConfig
+          // {
+            Type = "oneshot";
+            ExecStart = "${cfg.package}/bin/stockhouse lease --config ${leaseConfig}";
+            User = "stockhouse";
+            Group = "stockhouse";
+            StateDirectory = "stockhouse";
+            StateDirectoryMode = "0755";
+            SuccessExitStatus = "75";
+          };
+      };
+
+      systemd.timers.stockhouse-lease = {
+        description = "Stockhouse lease renewal on boot, hourly and daily";
+        wantedBy = ["timers.target"];
+        timerConfig = {
+          OnBootSec = "1min";
+          OnUnitActiveSec = "1h";
+          OnCalendar = "daily";
+          Persistent = true;
+          RandomizedDelaySec = toString cfg.lease.randomizedDelaySec;
+        };
+      };
+
+      # Restarted by activation; fires once activation has replaced
+      # /run/current-system (its last step).
+      systemd.timers.stockhouse-lease-switch = {
+        description = "Stockhouse lease renewal after activation";
+        timerConfig = {
+          OnActiveSec = "30s";
+          AccuracySec = "1s";
+          Unit = "stockhouse-lease.service";
+        };
+      };
+
+      system.activationScripts.stockhouse-lease = {
+        deps = [];
+        text = ''
+          ${config.systemd.package}/bin/systemctl restart --no-block stockhouse-lease-switch.timer || true
+        '';
+      };
     })
   ];
 }

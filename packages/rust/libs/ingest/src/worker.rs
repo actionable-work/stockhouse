@@ -84,12 +84,13 @@ impl<'a> Worker<'a> {
     }
 
     fn reconcile(&self) -> Result<(usize, usize), QueueError> {
+        self.queue.reconcile_uploads()?;
         let (mut reconciled, mut quarantined) = (0, 0);
         for stem in fsutil::stems(&self.queue.root().join("pending"), ".json")
             .map_err(io_err("list pending"))?
         {
             let path = self.queue.path("pending", &stem, ".json");
-            if self.queue.is_uploaded(&stem) {
+            if self.queue.is_uploaded_hash(&stem) {
                 fsutil::remove(&path).map_err(io_err("remove reconciled"))?;
                 reconciled += 1;
             } else if let Some(Err(())) = self.queue.read_record(&path)? {

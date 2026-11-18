@@ -120,3 +120,25 @@ type = "event"
 trigger = "`login`, `logout`, `refresh` or `status` runs against a fake server, succeeding or failing"
 system = "CLI entry point"
 action = "write stdout and stderr that contain no access token, refresh token, authorization code, PKCE verifier or device code, and contain `state` and `code_challenge` only inside the printed authorization URL"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-CLI-013"
+title = "The lease command dispatches to the lease client"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`stockhouse_cli::main` receives `lease --config <file>`"
+system = "CLI entry point"
+action = "run the lease client on that configuration and return its exit status, and return 2 for any other flag or a missing value"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-CLI-014"
+title = "Invalid server endpoints and credential sources are configuration errors"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`uploader` or `lease` is run with a server base URL that `ServerEndpoint::new` rejects, a credential source that cannot be built or configured, or a `server` credential for another private tier"
+system = "CLI entry point"
+action = "print the error to stderr and return exit status 2 without opening the queue or sending a request"

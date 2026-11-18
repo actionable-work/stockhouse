@@ -1,0 +1,12 @@
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+stockhouse-proto = { workspace = true }
+
+[package]
+name = "stockhouse-wire"
+publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true

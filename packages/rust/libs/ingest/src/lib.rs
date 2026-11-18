@@ -8,6 +8,7 @@
 mod config;
 mod fsutil;
 pub mod hook;
+mod identity;
 mod queue;
 mod record;
 mod rescan;
@@ -16,7 +17,10 @@ mod status;
 mod uploader;
 mod worker;
 
-pub use config::{BackendConfig, ScannerConfig, UploaderConfig, UploaderConfigError};
+pub use config::{
+    BackendConfig, ScannerConfig, ServerBackendConfig, UploaderConfig, UploaderConfigError,
+};
+pub use identity::UploadEntry;
 pub use queue::{EnqueueOutcome, FORMAT, Producer, Queue, QueueError};
 pub use record::{DoneRecord, Record};
 pub use rescan::{RescanError, RescanReport, rescan};

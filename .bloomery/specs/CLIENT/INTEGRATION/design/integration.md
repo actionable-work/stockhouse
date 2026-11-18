@@ -22,6 +22,7 @@ crates with their own component tests.
 | `login --config <auth.toml> [--device]` | [sign in](../../CREDS/design/oauth.md#login) with the loopback flow, or the device flow with `--device`; prompts go to stdout | 0 when signed in, 1 on failure, 2 on configuration error |
 | `logout --config <auth.toml>` | [revoke and delete](../../CREDS/design/oauth.md#logout) the stored tokens | 0 when revoked and deleted or not signed in, 1 when revocation or deletion failed (the store is still deleted after a failed revocation), 2 on configuration error |
 | `refresh --config <auth.toml>` | [force one refresh](../../CREDS/design/oauth.md#explicit-refresh) | 0 when refreshed, 1 when signed out or failed, 2 on configuration error |
+| `lease --config <file>` | renew this machine's leases (slots 1, 2 and extras) | 0, 75 (some slot not renewed), 1 (machine identity), 2 (configuration) |
 | `--version` | print `stockhouse <version> (protocol <n>)` | 0 |
 
 `status` takes exactly one of `--queue` and `--config`. Unknown commands,
@@ -45,9 +46,14 @@ options under `services.stockhouse`:
   `null` or `{ url, trustedKeys, credentialFile ? null }`.
 - `uploader.enable`, `uploader.queueDir` (default `/var/lib/stockhouse/queue`),
   `uploader.maxPending`, `uploader.maxAttempts`, `uploader.pollInterval`,
-  `uploader.rescanInterval`, `uploader.backend` (`deferred` or `nix-copy`),
-  `uploader.nixCopyDestination`, `uploader.scanner` and
-  `uploader.configureHook` (default true).
+  `uploader.rescanInterval`, `uploader.backend` (`deferred`, `nix-copy` or
+  `server`), `uploader.nixCopyDestination`, `uploader.scanner`,
+  `uploader.configureHook` (default true), `uploader.backoffBase` (default
+  5) and `uploader.backoffMax` (default 3600).
+- `lease.enable` (default true when the uploader is enabled with
+  `uploader.backend = "server"`),
+  `lease.randomizedDelaySec` (default 600) and `lease.extraSlots` (a list
+  of `{ slot, path }` with slots 3–10).
 
 Behavior:
 
@@ -75,11 +81,87 @@ Behavior:
 - The uploader runs as `stockhouse-uploader.service` under the static
   `stockhouse` user with `StateDirectory = stockhouse`, `Restart = always`,
   `ExecStart = stockhouse uploader --config <generated TOML>`.
-- `uploader.enable` defaults to false. With the default `deferred` backend, records
-  stay pending until P2.08 provides server upload.
+- `uploader.enable` defaults to false. With the default `deferred` backend,
+  records stay pending until a backend (normally `server`) is configured.
 - With `configureHook`, `nix.settings.post-build-hook` is a store script that
   runs `stockhouse post-build-hook --queue <queueDir> || true`; the capacity
   comes from the queue's `LIMITS`.
+- `backoffBase` and `backoffMax` become `backoff_base_secs` and
+  `backoff_max_secs`; the module asserts `backoffBase <= backoffMax`.
+- With `configureNix`, `nix.settings.fallback` defaults (`mkDefault`) to
+  `true`: a proxy 503 or 502 then fails only the substitution, and Nix builds
+  the path locally, so sign-out and server outages never block builds.
+- With `configureNix`, `nix.settings.narinfo-cache-negative-ttl` defaults
+  (`mkDefault`) to `proxy.narinfoCacheNegativeTtl`, 60 seconds instead of
+  Nix's 3600. The server signs uploaded paths after publication, so a path
+  can read as a miss briefly; a short TTL keeps that miss from being cached
+  for an hour.
+
+### Server upload and leases
+
+With `uploader.backend = "server"` the server is the private tier: the
+generated backend is `kind = "server"` with `base_url` equal to
+`proxy.private.url`, the module's `nix`, and the private tier's credential.
+That credential is the module's single `privateCredential` definition,
+shared by the uploader and lease units:
+
+- with `services.stockhouse.auth.enable`, the internal value
+  `services.stockhouse.auth.unitCredential` defined by server sign-in:
+  its `toml` (`credential = { server = "<auth configuration file>" }`) goes
+  into the generated configuration and its `serviceConfig`
+  (`LoadCredentialEncrypted`, `ReadWritePaths` for the token store) is merged
+  into each unit;
+- otherwise `credential = { systemd = "private" }` in the generated
+  configuration plus `LoadCredential = private:<proxy.private.credentialFile>`
+  on each unit.
+
+Either way the credential value never enters an option, derivation, store
+file or argument. Assertions: `proxy.private` is set; its URL starts with
+`https://`, or with `http://` and a loopback IP literal host, and ends
+in `/`; and
+`auth.enable` is true or `proxy.private.credentialFile` is set. Sign-in
+derives its private tier from `proxy.private.url`, so the audience check of
+the uploader and lease client passes by construction.
+
+The uploader and lease units share one hardening set: `ProtectSystem =
+strict`, `ProtectHome`, `PrivateTmp`, `NoNewPrivileges` and
+`RestrictAddressFamilies = AF_INET AF_INET6 AF_UNIX`, with writes limited to
+`StateDirectory = stockhouse` and, for the uploader, `ReadWritePaths` of the
+queue directory and any `nix-copy` destination (`-`-prefixed, so a path that
+does not exist yet does not stop the unit; plus the token store paths sign-in
+adds), so a non-default queue or destination stays writable.
+
+With `lease.enable`:
+
+- `stockhouse-lease.service` is `Type = oneshot` under the `stockhouse` user
+  with `StateDirectory = stockhouse`, the hardening set, the private
+  credential, `ExecStart = stockhouse lease --config <generated TOML>` and
+  `SuccessExitStatus = 75`. Its configuration has `base_url` and
+  `credential` as above, `machine_id_file = /var/lib/stockhouse/machine-id`,
+  the default `current_system` and `system_profile`, and one `[[extra]]` per
+  `lease.extraSlots` entry. The service has no `wantedBy` and nothing
+  requires or orders itself after it, so it is never part of the boot or
+  activation transaction.
+- `stockhouse-lease.timer` (`wantedBy = timers.target`) is the backstop: it
+  starts the service with `OnBootSec = 1min`, `OnUnitActiveSec = 1h`,
+  `OnCalendar = daily`, `Persistent = true` and `RandomizedDelaySec =
+  lease.randomizedDelaySec` (default 600, so a fleet does not renew in the
+  same second).
+- After activation: an activation snippet runs
+  `systemctl restart --no-block stockhouse-lease-switch.timer || true`.
+  `stockhouse-lease-switch.timer` has no `wantedBy`, `OnActiveSec = 30s` and
+  `AccuracySec = 1s`, and starts `stockhouse-lease.service`. The delay lets
+  activation finish replacing `/run/current-system` (its last step) before
+  slot 1 is read, and `--no-block` and `|| true` keep the snippet from
+  waiting on or failing activation, including during boot, when systemd is
+  not running yet.
+- The module asserts that `lease.enable` implies the uploader is enabled with
+  `uploader.backend = "server"`, and that `extraSlots` slots are distinct and
+  within 3–10 with absolute paths.
+
+No VM story uses the sign-in credential for the uploader or lease client;
+they use the `LoadCredential` path. Sign-in itself is covered by its own
+stories, and end to end the private server's drill covers the combination.
 
 ## Server sign-in
 
@@ -128,11 +210,11 @@ Behavior:
   };
   ```
 
-  Such a unit must also run as `User = Group = "stockhouse"`. W1 applies it
-  to `stockhouse-proxy.service` (the private tier's
-  `credential = { server = … }`); the upload workstream applies it to
-  `stockhouse-uploader.service` and `stockhouse-lease.service` and to any
-  later unit that needs the token. A consumer's credential assertion is
+  Such a unit must also run as `User = Group = "stockhouse"`. The module
+  applies it to `stockhouse-proxy.service` (the private tier's
+  `credential = { server = … }`), to `stockhouse-uploader.service` with the
+  `server` backend and to `stockhouse-lease.service`, and to any later unit
+  that needs the token. A consumer's credential assertion is
   `credentialFile != null || auth.enable`.
 - User model: with `auth.enable`, the proxy no longer uses `DynamicUser`. It
   runs as the static `stockhouse` system user and group, the same user as the
@@ -220,7 +302,8 @@ used as both the client and the daemon (`nix.package`):
 
 ## VM qualification
 
-The VM tests are four stories (`tests/vm-{proxy,substitution,durability,lifecycle}.test.nix`),
+The VM tests are nine stories
+(`tests/vm-{proxy,substitution,durability,lifecycle,signin,refresh,upload,upload-recovery,lease}.test.nix`),
 each run as one NixOS VM test per pinned Nix version on the shared node in
 `tests/lib/vm.nix`. Each story traces at most five requirements. A
 fixture signing key is written in the VM at runtime from a constant public
@@ -234,7 +317,7 @@ sets `narinfo-cache-negative-ttl = 0`, because every build first queries the
 proxy and a cached miss would hide the later upload, and it keeps the
 writable store on disk so built paths survive the reboot story.
 
-`tests/module-{proxy,ingest,auth}.test.nix` evaluate the module without a VM
+`tests/module-{proxy,ingest,auth,upload,lease}.test.nix` evaluate the module without a VM
 to check generated units, configuration and assertions.
 
 ### Sign-in stories
@@ -274,3 +357,23 @@ configuration. The revocation case shows that a signed-out machine answers
 503 (seen by `curl` and in Nix's own error output), and that after signing in
 again the same path substitutes at once, so no negative cache entry was
 left behind.
+
+### Server upload stories
+
+The `upload`, `upload-recovery` and `lease` stories use the same node with
+`uploader.backend = "server"` and lease renewal enabled
+(`randomizedDelaySec = 0`, `backoffMax = 10`). The private tier is a local
+fake server (`tests/lib/upload_server.py`, loopback `http://127.0.0.1:8486/t/1/`)
+that implements protocol v1 from this repository's spec: it requires the
+bearer from a runtime credential file (401 otherwise), keeps uploads,
+published paths and leases on disk under `/var/lib/stockhouse-fake` so they
+survive a reboot, refuses a declaration whose references (other than itself)
+it does not hold with `missing_references`, verifies each NAR's size and
+SHA-256 against its declaration, and logs one line per request with the
+method, path, upload identity and outcome. Control files make it answer
+`present` for chosen paths, `quota_exceeded` to every declaration,
+`verification_failed` for a chosen path, stall a chosen NAR body until
+released, or close the connection without replying after publishing a
+chosen NAR. It serves `nix-cache-info` and answers 404 to narinfo, so the
+proxy's private tier stays a valid upstream. It is a test fixture, not a
+server implementation, and it claims nothing about a real server.

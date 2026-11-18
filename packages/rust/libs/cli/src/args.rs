@@ -20,6 +20,8 @@ pub enum Parsed {
     Logout { config: PathBuf },
     /// `refresh --config <auth.toml>`.
     Refresh { config: PathBuf },
+    /// `lease --config <file>`.
+    Lease { config: PathBuf },
     /// `--version`.
     Version,
 }
@@ -92,6 +94,7 @@ pub fn parse(args: &[String]) -> Result<Parsed, UsageError> {
             queue: flags(rest, "--queue", None)?.0,
         }),
         "status" => status(rest),
+        "lease" => Ok(Parsed::Lease { config: config()? }),
         "login" => {
             let (config, device) = flags(rest, "--config", Some("--device"))?;
             Ok(Parsed::Login { config, device })

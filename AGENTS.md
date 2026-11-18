@@ -3,10 +3,13 @@
 ## Overview
 
 Stockhouse is the open-source Linux cache client for Hammerworks: public
-protocol types, a loopback substitution proxy, durable post-build ingestion,
+protocol types, a loopback substitution proxy, server sign-in, durable
+post-build ingestion with authenticated server upload and lease renewal,
 credential sources and a NixOS module. The repository is public. Licensed
-`MIT OR Apache-2.0`. The current slice is P2.09 groundwork; see
-`docs/P2_09_CLIENT_GROUNDWORK.md` for behavior, non-claims and deferred work.
+`MIT OR Apache-2.0`. The latest slice is P2.09 server sign-in, upload and
+leases; see `docs/P2_09_CLIENT_SERVER.md` (and the earlier
+`docs/P2_09_CLIENT_GROUNDWORK.md`) for behavior, non-claims and deferred
+work.
 
 ## Public/private boundary
 
@@ -50,9 +53,11 @@ This repository is public from its first commit, and the server is private.
 | `packages/rust/libs/oauth_fake` | `stockhouse-oauth-fake`: test-only fake OAuth server and private cache for component tests |
 | `packages/rust/libs/proxy` | `stockhouse-proxy`: configuration, tier upstreams, lookup policy and the loopback HTTP server |
 | `packages/rust/libs/ingest` | `stockhouse-ingest`: durable queue, post-build hook, uploader passes, backends, rescan |
-| `packages/rust/libs/cli` | `stockhouse-cli`: command dispatch and exit status, including `login`, `logout`, `refresh` and `status --config` |
+| `packages/rust/libs/wire` | `stockhouse-wire`: upload and lease protocol v1 codecs (declarations, request paths, reply classification, machine identity, lease slots) |
+| `packages/rust/libs/upload` | `stockhouse-upload`: protocol v1 server upload backend (closure, verified NAR stream, reconciliation) and the lease client |
+| `packages/rust/libs/cli` | `stockhouse-cli`: command dispatch and exit status, including `login`, `logout`, `refresh`, `status --config` and `lease` |
 | `nix/module.nix` | The NixOS client module (`nixosModules.default`) |
-| `tests/` | Bloomery test subflake: module evaluation and NixOS VM tests; `tests/lib/fake_server.py` is the VM stories' fake OAuth server and private cache |
+| `tests/` | Bloomery test subflake: module evaluation and NixOS VM tests; `tests/lib/fake_server.py` is the VM stories' fake OAuth server and private cache, and `tests/lib/upload_server.py` the fake upload and lease protocol v1 server |
 | `.bloomery/specs/CLIENT/` | Code-facing specifications (EARS requirements and designs) |
 | `docs/` | Slice records and follow-ups |
 

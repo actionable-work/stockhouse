@@ -9,7 +9,7 @@ use stockhouse_proto::{StorePath, UploadId};
 /// The current queue format marker.
 pub const FORMAT: &str = "stockhouse-queue-v1\n";
 pub(crate) const OVERFLOW_CAP: u64 = 1024 * 1024;
-const DIRS: [&str; 4] = ["pending", "failed", "done", "tmp"];
+const DIRS: [&str; 5] = ["pending", "failed", "done", "tmp", "uploads"];
 
 /// A queue could not be used.
 #[derive(Debug)]
@@ -64,6 +64,7 @@ pub enum EnqueueOutcome {
 pub struct Queue {
     root: PathBuf,
     max_pending: usize,
+    store_root: PathBuf,
 }
 
 impl Queue {
@@ -84,6 +85,7 @@ impl Queue {
         Ok(Self {
             root: root.to_path_buf(),
             max_pending,
+            store_root: PathBuf::from("/"),
         })
     }
 
@@ -100,7 +102,22 @@ impl Queue {
         Ok(Self {
             root: root.to_path_buf(),
             max_pending,
+            store_root: PathBuf::from("/"),
         })
+    }
+
+    /// Checks store paths under `root` instead of `/` (tests only).
+    #[doc(hidden)]
+    pub fn with_store_root(mut self, root: &Path) -> Self {
+        self.store_root = root.to_path_buf();
+        self
+    }
+
+    /// Whether a store path exists on disk (`lstat`); errors other than
+    /// `ENOENT` count as existing.
+    pub fn store_path_exists(&self, path: &StorePath) -> bool {
+        let on_disk = self.store_root.join(path.as_str().trim_start_matches('/'));
+        !matches!(fs::symlink_metadata(on_disk), Err(e) if e.kind() == io::ErrorKind::NotFound)
     }
 
     /// The configured capacity.
@@ -151,18 +168,17 @@ impl Queue {
         }
     }
 
-    pub(crate) fn is_uploaded(&self, hash: &str) -> bool {
+    /// Whether a path is in the upload ledger.
+    pub fn is_uploaded(&self, path: &StorePath) -> bool {
+        self.is_uploaded_hash(path.hash().as_str())
+    }
+
+    pub(crate) fn is_uploaded_hash(&self, hash: &str) -> bool {
         self.path("done", hash, ".json").exists()
     }
 
     pub(crate) fn write_done(&self, record: &Record, now: u64) -> Result<(), QueueError> {
-        let done = DoneRecord {
-            version: 1,
-            id: record.id.to_string(),
-            store_path: record.store_path.to_string(),
-            uploaded_at: now,
-        };
-        let bytes = serde_json::to_vec(&done).expect("done record serializes");
+        let bytes = done_bytes(&record.id, &record.store_path, now);
         let target = self.path("done", record.store_path.hash().as_str(), ".json");
         fsutil::replace(&self.tmp(), &target, &bytes).map_err(io_err("write done"))
     }
@@ -172,6 +188,16 @@ impl Queue {
         let bytes = fs::read(self.path("done", path.hash().as_str(), ".json")).ok()?;
         serde_json::from_slice(&bytes).ok()
     }
+}
+
+pub(crate) fn done_bytes(id: &UploadId, path: &StorePath, now: u64) -> Vec<u8> {
+    let done = DoneRecord {
+        version: 1,
+        id: id.to_string(),
+        store_path: path.to_string(),
+        uploaded_at: now,
+    };
+    serde_json::to_vec(&done).expect("done record serializes")
 }
 
 fn parse_limits(text: &str) -> Option<usize> {
@@ -195,7 +221,7 @@ impl Producer<'_> {
     ) -> Result<EnqueueOutcome, QueueError> {
         let q = self.queue;
         let hash = path.hash();
-        if q.is_uploaded(hash.as_str()) {
+        if q.is_uploaded_hash(hash.as_str()) {
             return Ok(EnqueueOutcome::AlreadyUploaded);
         }
         if let Some(Ok(r)) = q.read_record(&q.path("pending", hash.as_str(), ".json"))? {

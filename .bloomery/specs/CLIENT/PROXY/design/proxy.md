@@ -58,7 +58,9 @@ exits before listening.
 
 Tiers are consulted in the fixed order `private`, `shared`, `public`;
 unconfigured tiers are skipped. Each tier has an `Upstream` that fetches a
-relative path under its base URL and classifies the outcome:
+relative path under its base URL and classifies the outcome. HTTP tiers use
+a client that ignores environment proxies (`no_proxy()`), so a tier's
+credential never reaches a proxy named by `HTTPS_PROXY` and the like:
 
 | Upstream result | HTTP | `file://` |
 | --- | --- | --- |
@@ -149,7 +151,11 @@ Nix retries other statuses and then disables the substituter for a while,
 silently moving on to the next substituter in its list. A 502 would therefore
 still fall through if Nix had another substituter. The NixOS module makes the
 proxy Nix's only substituter (the public tier lives inside the proxy), so an
-error reaches the user as a failed substitution.
+error reaches the user as a failed substitution, never as a miss. The module
+also sets Nix's `fallback = true`, so when a substitution fails (for example
+503 while signed out or during a server outage) Nix builds the path locally
+instead of failing the build; `--max-jobs 0` or a path that cannot be built
+still fails.
 
 ### Store-path collisions
 

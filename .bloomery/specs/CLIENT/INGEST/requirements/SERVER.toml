@@ -1,0 +1,386 @@
+group = "SERVER"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-001"
+title = "Server endpoints must be absolute and clean"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a server endpoint is built from a base URL that does not parse, has a scheme other than `http` or `https`, has user information, a query or a fragment, or does not end in `/`"
+system = "`ServerEndpoint::new`"
+action = "return `EndpointError::InvalidUrl`"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-002"
+title = "Cleartext is allowed only to loopback IP literals"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a server endpoint is built from an `http` base URL whose host is not a loopback IP literal"
+system = "`ServerEndpoint::new`"
+action = "return `EndpointError::Cleartext`, accepting `http` only for `127.0.0.0/8` and `[::1]` hosts"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-003"
+title = "The bearer goes only under the base URL"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the server backend or lease client sends any request"
+system = "server HTTP client"
+action = "send it to the base URL joined with a protocol path, with `Authorization: Bearer` and the current credential, through no environment-configured proxy, and follow no redirect, treating a 3xx reply as an unexpected status"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-004"
+title = "Credentials never appear in outcomes or logs"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a server request fails for any reason"
+system = "server backend"
+action = "produce an outcome message that names the store path, the request (`POST declare`, `PUT nar` or `GET status`) and the HTTP status or protocol code, and contains neither the credential nor the response body"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-005"
+title = "Credential errors defer without a request"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the credential source reports any error when a job first reads the credential, or yields a credential that is not a valid `Authorization` header value"
+system = "server backend"
+action = "return `Deferred(\"credential unavailable: <error>\")` with the error's display text, without sending a request or consuming an attempt, never sending an empty or altered bearer"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-006"
+title = "Credential errors later in a job also defer"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the credential source reports any error when it is read again after `invalidate` or before a NAR upload"
+system = "server backend"
+action = "return `Deferred` with the error's display text without sending that request and keep each upload entry's `nar_sent` value"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-007"
+title = "A 401 retries once only after a successful invalidate"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a server upload or lease request is answered 401"
+system = "server backend and lease client"
+action = "call `invalidate` with the sent credential, send the same request once more with the credential read again only when it returns true, and otherwise or after a second 401 return `Retry(Transient)` for an upload or fail the lease slot"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-008"
+title = "A path missing locally is rejected without contact"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a job's store path does not exist on disk"
+system = "server backend"
+action = "return `Rejected(\"not in the local store\")` without running Nix or sending a request"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-009"
+title = "The closure query has fixed arguments"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the server backend queries a job's closure"
+system = "server backend"
+action = "run the configured `nix` with exactly `--extra-experimental-features`, `nix-command`, `path-info`, `--json`, `--recursive` and the store path"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-010"
+title = "Closures parse from both pinned path-info shapes"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "closure output keyed by full store paths or in the version 2 envelope keyed by basenames is parsed"
+system = "closure parser"
+action = "return each entry's store path, NarHash from SRI or `sha256:` form, NarSize, references, deriver and CA, ignoring other fields"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-011"
+title = "Unusable closure output retries"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "closure output has another shape or an invalid value, a reference that is not an entry, no entry for the job's path, a cycle or more than 64 MiB, the command fails, or it produces no output for the request timeout"
+system = "server backend"
+action = "kill and reap the command when it is still running, return `Retry(Transient)` with a message of at most 512 bytes, and send no request"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-012"
+title = "Oversized closures are rejected"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a job's closure has more entries than `max_closure_paths`"
+system = "server backend"
+action = "return `Rejected(\"closure too large\")` without sending a request"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-013"
+title = "References upload before referrers"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a closure is uploaded"
+system = "server backend"
+action = "declare every path after all of its references other than itself, breaking ties by store path bytewise"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-014"
+title = "Uploaded dependencies are skipped"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a closure contains a dependency that already has a done record"
+system = "server backend"
+action = "send no request for that dependency"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-015"
+title = "Declarations carry the path-info facts"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the server backend declares a path"
+system = "server backend"
+action = "send `POST uploads/<id>` with `Content-Type: application/json` and a declaration of the path's store path, canonical NarHash, NarSize, reference basenames including any self-reference, deriver basename and CA"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-016"
+title = "Held paths complete without a NAR"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a declaration or status request is answered `present` or `published`"
+system = "server backend"
+action = "complete the path without sending its NAR, writing the ledger for a dependency"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-017"
+title = "An open upload is marked before its NAR is sent"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a declaration is answered `open`"
+system = "server backend"
+action = "persist `nar_sent = true` for the path, read the credential, and only then send the NAR"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-018"
+title = "NARs stream with the declared length"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the server backend sends a NAR"
+system = "server backend"
+action = "send `PUT uploads/<id>/nar` with `Content-Type: application/x-nix-nar`, `Content-Length` equal to the declared NarSize and the stdout of `nix --extra-experimental-features nix-command store dump-path <path>` as the body"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-019"
+title = "NAR streaming uses bounded memory"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a NAR of any size is sent"
+system = "server backend"
+action = "read the dump in 64 KiB chunks and hold at most two chunks in memory"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-020"
+title = "A NAR that does not match is never sent complete"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the dumped NAR has more or fewer bytes than declared or a different SHA-256"
+system = "server backend"
+action = "abort the request before releasing the final chunk and return `Rejected` naming the path"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-021"
+title = "A failing dump retries and its child is reaped"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the NAR dump fails to start or exits nonzero, or a NAR request ends before the dump was waited for"
+system = "server backend"
+action = "abort the request before releasing the final chunk, kill and reap the dump process, read its stderr from nowhere (null), and return `Retry(Transient)` for a failed dump"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-022"
+title = "Missing references are re-uploaded through the worklist"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a declaration or NAR upload is answered `missing_references` naming declared references"
+system = "server backend"
+action = "remove each named path's done record, put the named paths and then the path back at the front of the job's worklist, upload them, declare the path again, and continue the job without consuming an attempt"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-023"
+title = "Missing-reference and re-declare transitions are bounded"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a path is answered `missing_references` or `unknown_upload` a second time in one job, or `missing_references` names a path that is not one of its declared references other than itself"
+system = "server backend"
+action = "return `Retry(Transient)`"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-024"
+title = "Permanent refusals reject the record"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "any request is answered `verification_failed`, `conflict`, `too_large` or `bad_request`"
+system = "server backend"
+action = "return `Rejected` naming the path and the code"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-025"
+title = "Quota exhaustion is a quota retry"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a request is answered `quota_exceeded`"
+system = "server backend"
+action = "return `Retry(QuotaExceeded)`"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-026"
+title = "Outages before the NAR is sent are transient"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a declaration fails with 503, a transport error, its total timeout or an unexpected reply, or a NAR request fails that way before its body was fully sent"
+system = "server backend"
+action = "return `Retry(Transient)`"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-027"
+title = "A lost reply after the NAR is uncertain"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a NAR request gets no reply, a transport error, its total timeout or an unexpected reply after its body was fully sent"
+system = "server backend"
+action = "return `Retry(Uncertain)` and keep `nar_sent = true` for the path"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-028"
+title = "Uncertain uploads are reconciled before resending"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the server backend uploads a path whose entry has `nar_sent = true`"
+system = "server backend"
+action = "send `GET uploads/<id>` first, completing on `present` or `published`, reading the credential and sending the NAR on `open`, clearing the mark and declaring again on `unknown_upload`, rejecting on `verification_failed`, and returning `Retry(Uncertain)` on an outage"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-029"
+title = "An unknown upload is declared again"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a NAR or status request is answered `unknown_upload`"
+system = "server backend"
+action = "clear the mark and declare the path again, at most once per path per job"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-030"
+title = "Upload identities are stable"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a job is attempted again, including after an uploader restart or reboot"
+system = "server backend"
+action = "use the record identity for the queued path and the same `uploads/` identity for each dependency as in every earlier attempt"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-031"
+title = "A job uploads only when its whole closure did"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "any path of a job's closure ends without completing"
+system = "server backend"
+action = "stop at that path and return its outcome, returning `Uploaded` only when every closure path completed"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-032"
+title = "Credentials must be issued for the base URL"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the server backend or lease client is configured with a `server` credential whose sign-in configuration names a private tier other than the base URL"
+system = "server endpoint construction"
+action = "refuse the endpoint with `EndpointError::AudienceMismatch` before any request"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-033"
+title = "Each request has a bounded total time"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a server request is sent"
+system = "server HTTP client"
+action = "bound declare, status and lease requests by `request_timeout_secs` and a NAR upload by `request_timeout_secs` plus one second per started 256 KiB of NarSize, with TCP keepalive of 60 seconds and no client-wide timeout"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-034"
+title = "The credential is fresh for each NAR upload"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a job sends a NAR"
+system = "server backend"
+action = "read the credential immediately before the NAR request, besides once at the start of the job and after a successful `invalidate`"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-035"
+title = "Each path has a request budget"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a path has used 8 declare, NAR and status requests in one job, not counting single retries after a successful `invalidate`"
+system = "server backend"
+action = "send no further request for it and return `Retry(Transient)`"

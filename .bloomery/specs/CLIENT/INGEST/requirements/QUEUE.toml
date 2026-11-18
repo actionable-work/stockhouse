@@ -175,3 +175,91 @@ type = "event"
 trigger = "a rescan enqueues a path whose pending record is unreadable"
 system = "queue"
 action = "return `Overflow` without appending to the live overflow marker, so the rescan stops incomplete and keeps the marker it holds"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-017"
+title = "The uploads directory is additive to format v1"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "`Queue::create` runs on a queue with or without `uploads/`"
+system = "queue"
+action = "create `uploads/` when absent while leaving `FORMAT`, records and done records unchanged, and let `Queue::open` succeed on a v1 queue without `uploads/`"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-018"
+title = "A dependency's upload identity is created once"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "`Queue::upload_state` is called for a dependency path, repeatedly or by a new process"
+system = "queue"
+action = "create the entry with `nar_sent = false` and the identity of the path's pending record if one exists, otherwise a fresh identity, by staged hard link on first use, and return the same identity on every later call"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-019"
+title = "The queued path's upload identity is the record identity"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "`Queue::upload_state` is called for the record's own path with its identity"
+system = "queue"
+action = "return an entry with that identity, replacing an existing entry with another identity by one with `nar_sent = false`"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-020"
+title = "Corrupt upload entries are quarantined"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "an `uploads/` entry does not parse, has a version other than 1 or names another store path"
+system = "queue"
+action = "move its bytes unchanged to `failed/<hash>.upload.corrupt`, count it in `status.failed`, and create a replacement entry"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-021"
+title = "The NAR-sent mark is durable before the NAR is sent"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "`Queue::mark_nar_sent` or `Queue::clear_nar_sent` returns"
+system = "queue"
+action = "have replaced the entry atomically with the new `nar_sent` value and synced it, so a restarted process reads that value"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-022"
+title = "Completing a dependency writes the ledger first"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "`Queue::complete_path` records a dependency as uploaded"
+system = "queue"
+action = "write `done/<hash>.json` with the entry's identity when absent and only then remove the `uploads/` entry"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-023"
+title = "Stale upload entries are reconciled"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a pass reconciles an `uploads/` entry whose done record exists or whose store path no longer exists"
+system = "uploader pass"
+action = "remove that entry and keep every other entry unchanged"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-024"
+title = "A ledger entry can be forgotten"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "`Queue::forget_done` is called for a path"
+system = "queue"
+action = "remove that path's done record so the path is no longer reported uploaded"

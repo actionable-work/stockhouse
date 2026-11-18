@@ -64,7 +64,8 @@ its value.
 ## HTTP client
 
 The endpoint client is `reqwest` (already locked by the proxy) with
-redirects disabled, the system certificate verifier for `https://` and no
+redirects disabled, environment proxies ignored (`no_proxy()`, so
+`HTTPS_PROXY` and the like never see a refresh token), the system certificate verifier for `https://` and no
 trust roots for loopback `http://`, connect and per-read timeouts of
 `request_timeout_secs` plus a total request timeout of the same length (so a
 reply trickling in byte by byte cannot hold the store lock; exceeding it is

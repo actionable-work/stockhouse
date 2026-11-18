@@ -54,6 +54,22 @@ impl Sha256 {
         };
         bytes.map(Self).ok_or(HashError::InvalidEncoding)
     }
+
+    /// Parses the SRI form `sha256-<44 padded base64 chars>`.
+    pub fn parse_sri(text: &str) -> Result<Self, HashError> {
+        use base64::Engine;
+        let body = text
+            .strip_prefix("sha256-")
+            .ok_or(HashError::UnsupportedAlgorithm)?;
+        if body.len() != 44 {
+            return Err(HashError::InvalidEncoding);
+        }
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(body)
+            .map_err(|_| HashError::InvalidEncoding)?;
+        let digest: [u8; 32] = bytes.try_into().map_err(|_| HashError::InvalidEncoding)?;
+        Ok(Self(digest))
+    }
 }
 
 fn decode_hex(text: &str) -> Option<[u8; 32]> {

@@ -6,6 +6,7 @@ stockhouse-ingest = { workspace = true }
 stockhouse-proto = { workspace = true }
 stockhouse-proxy = { workspace = true }
 stockhouse-signin = { workspace = true }
+stockhouse-upload = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]

@@ -323,6 +323,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1f9e3d69d39e4862ffed03ed071a76f9a13ba1d9109d355b0f0aa6b15e393c4"
 dependencies = [
  "futures-core",
+ "futures-sink",
 ]
 
 [[package]]
@@ -932,6 +933,7 @@ checksum = "16a1cfa75cc186dd73d5818e510e042e40927bccc9c236b061cea97e1eb08029"
 dependencies = [
  "base64 0.23.1",
  "bytes",
+ "futures-channel",
  "futures-core",
  "futures-util",
  "http",
@@ -1278,6 +1280,7 @@ dependencies = [
  "stockhouse-proxy",
  "stockhouse-signin",
  "stockhouse-token-store",
+ "stockhouse-upload",
  "tokio",
 ]
 
@@ -1298,6 +1301,7 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+ "stockhouse-credentials",
  "stockhouse-proto",
  "toml",
 ]
@@ -1384,6 +1388,32 @@ dependencies = [
  "sha2",
  "stockhouse-credentials",
  "zeroize",
+]
+
+[[package]]
+name = "stockhouse-upload"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "libc",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "stockhouse-auth",
+ "stockhouse-credentials",
+ "stockhouse-ingest",
+ "stockhouse-proto",
+ "stockhouse-wire",
+ "toml",
+]
+
+[[package]]
+name = "stockhouse-wire"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "stockhouse-proto",
 ]
 
 [[package]]

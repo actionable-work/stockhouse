@@ -241,3 +241,14 @@ type = "event"
 trigger = "a login succeeds while the store reads as `Corrupt` or `Mismatch`"
 system = "login"
 action = "overwrite the store with the new token set and send no revocation request"
+
+[[requirements]]
+id = "CLIENT-CREDS-GRANT-023"
+title = "Sign-in requests ignore environment proxies"
+manual = false
+design = "design/oauth.md"
+[requirements.ears]
+type = "event"
+trigger = "an OAuth endpoint is contacted while `HTTP_PROXY`, `HTTPS_PROXY` or `ALL_PROXY` is set"
+system = "endpoint client"
+action = "connect to the endpoint directly and send nothing through the environment-configured proxy"

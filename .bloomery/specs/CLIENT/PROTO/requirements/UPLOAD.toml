@@ -1,0 +1,155 @@
+group = "UPLOAD"
+
+[[requirements]]
+id = "CLIENT-PROTO-UPLOAD-001"
+title = "Declarations render canonically"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "an upload declaration is rendered"
+system = "declaration renderer"
+action = "emit a JSON object with exactly `version` 1, `store_path`, `nar_hash` as `sha256:<nix32>`, `nar_size`, `references` as basenames in the given order, `deriver` and `ca` in that key order, with absent `deriver` and `ca` as `null`"
+
+[[requirements]]
+id = "CLIENT-PROTO-UPLOAD-002"
+title = "Valid declarations render, fit the cap and round-trip"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a declaration built with `UploadDeclaration::new` is rendered and parsed"
+system = "declaration codec"
+action = "produce at most 4 MiB of JSON that parses back to a declaration equal to the original, including at the 10 000-reference limit"
+
+[[requirements]]
+id = "CLIENT-PROTO-UPLOAD-003"
+title = "Declarations refuse unknown, missing and mistyped keys"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a declaration is parsed that is not a JSON object, has an unknown, missing or repeated key, or has a value of the wrong JSON type"
+system = "declaration parser"
+action = "return `DeclarationError::Malformed`"
+
+[[requirements]]
+id = "CLIENT-PROTO-UPLOAD-004"
+title = "Declarations refuse other versions"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a well-formed declaration with a `version` other than 1 is parsed"
+system = "declaration parser"
+action = "return `DeclarationError::UnsupportedVersion`"
+
+[[requirements]]
+id = "CLIENT-PROTO-UPLOAD-005"
+title = "Declarations refuse invalid values"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a declaration has an invalid store path or hash, a zero `nar_size`, an invalid or duplicate reference, more than 10 000 references, a deriver that is not a `.drv` basename, or a `ca` over 1024 bytes or with a control character"
+system = "declaration parser and constructor"
+action = "return `DeclarationError::InvalidField` naming that field"
+
+[[requirements]]
+id = "CLIENT-PROTO-UPLOAD-006"
+title = "Oversized declarations are refused before parsing"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "declaration input larger than 4 MiB is parsed"
+system = "declaration parser"
+action = "return `DeclarationError::TooLarge` without parsing JSON"
+
+[[requirements]]
+id = "CLIENT-PROTO-UPLOAD-007"
+title = "Upload request paths are rendered from typed values"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "the declare, NAR or status path of an upload identity is rendered"
+system = "upload path renderer"
+action = "return `uploads/<UploadId>` for declare and status and `uploads/<UploadId>/nar` for the NAR"
+
+[[requirements]]
+id = "CLIENT-PROTO-UPLOAD-008"
+title = "Declaration replies classify by status and body"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a reply to a declaration is classified"
+system = "reply classifier"
+action = "map 200 `present`, `published` and `open` to their states and 400 `bad_request`, 400 `verification_failed`, 409 `conflict`, 413 `too_large`, 422 `missing_references`, 507 `quota_exceeded`, 401 and 503 to their refusals"
+
+[[requirements]]
+id = "CLIENT-PROTO-UPLOAD-009"
+title = "NAR replies classify by status and body"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a reply to a NAR upload is classified"
+system = "reply classifier"
+action = "map 200 `present` and `published` to their states and 400 `verification_failed`, 400 `bad_request`, 404 `unknown_upload`, 409 `conflict`, 413 `too_large`, 422 `missing_references`, 507 `quota_exceeded`, 401 and 503 to their refusals, and 200 `open` to `ReplyError::Unexpected`"
+
+[[requirements]]
+id = "CLIENT-PROTO-UPLOAD-010"
+title = "Status replies classify by status and body"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a reply to an upload status request is classified"
+system = "reply classifier"
+action = "map 200 `open`, `published` and `present` to their states and 400 `verification_failed`, 404 `unknown_upload`, 401 and 503 to their refusals"
+
+[[requirements]]
+id = "CLIENT-PROTO-UPLOAD-011"
+title = "Replies outside the protocol are unexpected"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a reply has a status and body pair outside its request kind's table, an unknown key, a `version` key, or a body that is not the expected JSON object"
+system = "reply classifier"
+action = "return `ReplyError::Unexpected` with the status"
+
+[[requirements]]
+id = "CLIENT-PROTO-UPLOAD-012"
+title = "401 and 503 replies are classified without reading the body"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a reply has status 401 or 503 with any body, including non-JSON"
+system = "reply classifier"
+action = "return `Unauthorized` or `Unavailable` respectively"
+
+[[requirements]]
+id = "CLIENT-PROTO-UPLOAD-013"
+title = "Missing-reference lists are bounded and valid"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a 422 `missing_references` reply has an empty `missing` list, more than 10 000 entries, a duplicate or a value that is not a store path basename"
+system = "reply classifier"
+action = "return `ReplyError::Unexpected` with status 422"
+
+[[requirements]]
+id = "CLIENT-PROTO-UPLOAD-014"
+title = "Oversized replies are refused"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "an upload reply body larger than 4 MiB is classified"
+system = "reply classifier"
+action = "return `ReplyError::TooLarge`"

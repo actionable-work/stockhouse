@@ -186,3 +186,102 @@ type = "event"
 trigger = "`services.stockhouse.auth.enable` is true"
 system = "NixOS module"
 action = "expose `auth.unitCredential` with the credential spec `{ server = <configFile> }`, the `serviceConfig` (`ReadWritePaths` for the store directory and, in sealed mode, `LoadCredentialEncrypted`) and the key oneshot ordering, and apply it to the proxy unit"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-018"
+title = "The server backend uploads to the private tier"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`uploader.backend` is `server`"
+system = "NixOS module"
+action = "generate a `server` backend whose `base_url` is `proxy.private.url` with the private credential: `auth.unitCredential`'s TOML and service settings when `auth.enable` is true, otherwise `credential = { systemd = \"private\" }` and `LoadCredential = private:<proxy.private.credentialFile>` on `stockhouse-uploader.service`"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-019"
+title = "The server backend needs a protected private tier"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`uploader.backend` is `server` without a private tier, with neither `auth.enable` nor `proxy.private.credentialFile`, with a private URL not ending in `/`, or with an `http://` private URL whose host is not a loopback IP literal"
+system = "NixOS module"
+action = "fail evaluation with an assertion naming `services.stockhouse.uploader.backend`"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-020"
+title = "The lease service is a hardened, credentialed oneshot"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`lease.enable` is true"
+system = "NixOS module"
+action = "define `stockhouse-lease.service` with `Type = oneshot`, the `stockhouse` user, the same private credential and hardening (`ProtectSystem = strict`, `ProtectHome`, `PrivateTmp`, `NoNewPrivileges`, `RestrictAddressFamilies = AF_INET AF_INET6 AF_UNIX`) as `stockhouse-uploader.service`, whose writable paths are only the queue directory, a `nix-copy` destination and sign-in paths, with `SuccessExitStatus = 75` and `ExecStart = stockhouse lease --config` on a configuration with the private tier URL and `/var/lib/stockhouse/machine-id`"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-021"
+title = "Leases renew on boot, hourly, daily and after activation"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`lease.enable` is true"
+system = "NixOS module"
+action = "define `stockhouse-lease.timer` with `OnBootSec = 1min`, `OnUnitActiveSec = 1h`, `OnCalendar = daily`, `Persistent = true` and `RandomizedDelaySec` from `lease.randomizedDelaySec` (default 600), and an activation snippet running `systemctl restart --no-block stockhouse-lease-switch.timer || true` whose timer has `OnActiveSec = 30s`, `AccuracySec = 1s` and no `wantedBy`, both starting `stockhouse-lease.service`"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-022"
+title = "Lease renewal stays out of boot and activation"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`lease.enable` is true"
+system = "NixOS module"
+action = "give `stockhouse-lease.service` and `stockhouse-lease-switch.timer` no `wantedBy`, `requiredBy` or `before` entries and install only `stockhouse-lease.timer` into `timers.target`"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-023"
+title = "Lease options are validated"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`lease.enable` is true without the uploader enabled with the `server` backend, or `lease.extraSlots` has a slot outside 3–10, a repeated slot or a relative path"
+system = "NixOS module"
+action = "fail evaluation with an assertion naming the option"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-024"
+title = "Backoff options reach the uploader"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`uploader.backoffBase` and `uploader.backoffMax` are set"
+system = "NixOS module"
+action = "write them as `backoff_base_secs` and `backoff_max_secs` and fail evaluation when `backoffBase` exceeds `backoffMax`"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-025"
+title = "Narinfo misses are cached briefly"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`proxy.configureNix` is true"
+system = "NixOS module"
+action = "set `nix.settings.narinfo-cache-negative-ttl` to `proxy.narinfoCacheNegativeTtl` (default 60) at default priority, so a path published but not yet signed is retried within a minute and a configuration can still override it"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-026"
+title = "Substitution errors fall back to building"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`proxy.configureNix` is true"
+system = "NixOS module"
+action = "set `nix.settings.fallback = true` at default priority, so a build whose substitution fails with a proxy 503 or 502 is built locally instead of failing"

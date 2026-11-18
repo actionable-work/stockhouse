@@ -45,13 +45,15 @@ pub trait Uploader {
     fn upload(&self, job: &UploadJob) -> UploadOutcome;
 }
 
-/// The default backend until authenticated server upload exists.
+/// The default backend: nothing is uploaded until a backend is configured.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DeferredUploader;
 
 impl Uploader for DeferredUploader {
     fn upload(&self, _job: &UploadJob) -> UploadOutcome {
-        UploadOutcome::Deferred("server upload requires P2.08".to_owned())
+        UploadOutcome::Deferred(
+            "no upload backend configured (set backend = \"server\")".to_owned(),
+        )
     }
 }
 

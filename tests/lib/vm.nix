@@ -40,6 +40,43 @@
     http.server.HTTPServer(("127.0.0.1", 8485), Handler).serve_forever()
   '';
 
+  # The server-backend variant: the private tier is the local fake protocol
+  # v1 server, which the uploader and lease client talk to.
+  serverNode = {
+    systemd.services.stockhouse-vm-fake = {
+      wantedBy = ["multi-user.target"];
+      before = ["stockhouse-proxy.service" "stockhouse-uploader.service"];
+      after = ["stockhouse-vm-token.service"];
+      requires = ["stockhouse-vm-token.service"];
+      serviceConfig = {
+        ExecStart = "${pkgs.python3}/bin/python3 ${./upload_server.py} /var/lib/stockhouse-vm/private-token";
+        StateDirectory = "stockhouse-fake";
+      };
+    };
+    systemd.services.stockhouse-uploader = {
+      after = ["stockhouse-vm-token.service"];
+      requires = ["stockhouse-vm-token.service"];
+    };
+    systemd.services.stockhouse-lease.after = ["stockhouse-vm-token.service"];
+    services.stockhouse = {
+      proxy.private = lib.mkForce {
+        url = "http://127.0.0.1:8486/t/1/";
+        trustedKeys = ["${keyName}:${publicKey}"];
+        credentialFile = "/var/lib/stockhouse-vm/private-token";
+      };
+      uploader = {
+        backend = lib.mkForce "server";
+        nixCopyDestination = lib.mkForce null;
+        backoffMax = 10;
+        maxPending = lib.mkForce 32;
+        # No rescans: queued paths reach the server only as records or
+        # through a closure, so the stories see exactly those uploads.
+        scanner = lib.mkForce "none";
+      };
+      lease.randomizedDelaySec = 0;
+    };
+  };
+
   node = nixPackage: extraModule: {config, ...}: {
     imports = [module extraModule];
     nix.package = nixPackage;
@@ -60,9 +97,11 @@
       };
       script = ''
         install -d -m 0700 /var/lib/stockhouse-vm
-        if [ ! -f /var/lib/stockhouse-vm/shared-token ]; then
-          (umask 077; head -c 24 /dev/urandom | ${pkgs.coreutils}/bin/base64 | tr -d '/+=\n' > /var/lib/stockhouse-vm/shared-token)
-        fi
+        for name in shared-token private-token; do
+          if [ ! -f /var/lib/stockhouse-vm/$name ]; then
+            (umask 077; head -c 24 /dev/urandom | ${pkgs.coreutils}/bin/base64 | tr -d '/+=\n' > /var/lib/stockhouse-vm/$name)
+          fi
+        done
       '';
     };
     systemd.services.stockhouse-vm-shared = {
@@ -161,6 +200,37 @@
         return code == 0 and json.loads(out)["signed_in"]
 
 
+    UPLOAD_STATE = "/var/lib/stockhouse-fake"
+
+
+    def fake_log():
+        return machine.succeed(f"cat {UPLOAD_STATE}/requests.log 2>/dev/null || true").splitlines()
+
+
+    def fake_lines(h):
+        return [line for line in fake_log() if f" {h} " in f" {line} "]
+
+
+    def control(name, on=True):
+        if on:
+            machine.succeed(f"touch {UPLOAD_STATE}/control/{name}")
+        else:
+            machine.succeed(f"rm -f {UPLOAD_STATE}/control/{name}")
+
+
+    def pending_record(path):
+        return json.loads(machine.succeed(f"cat {QUEUE}/pending/{store_hash(path)}.json"))
+
+
+    def build_expr(expr):
+        return machine.succeed(f"nix-build --no-out-link -E '{expr}'").strip()
+
+
+    def drv(tag, refs=()):
+        body = " ".join("''${" + r + "}" for r in refs)
+        return f'derivation {{ name = "vm-{tag}"; system = builtins.currentSystem; builder = "/bin/sh"; args = [ "-c" "echo {tag} {body} > $out" ]; }}'
+
+
     def wait_drained():
         machine.wait_until_succeeds(f"test $(ls {QUEUE}/pending | wc -l) -eq 0", timeout=120)
 
@@ -190,15 +260,22 @@ in {
     script,
     passthru,
     signIn ? false,
+    backend ? "nix-copy",
   }:
     lib.mapAttrs' (version: nixPackage:
       lib.nameValuePair "vm-${story}-${version}" (pkgs.testers.runNixOSTest {
         name = "stockhouse-vm-${story}-${version}";
-        nodes.machine = node nixPackage (
-          if signIn
-          then authModule
-          else {}
-        );
+        nodes.machine = {
+          imports =
+            [
+              (node nixPackage (
+                if signIn
+                then authModule
+                else {}
+              ))
+            ]
+            ++ lib.optional (backend == "server") serverNode;
+        };
         testScript = prelude + script;
         inherit passthru;
       }))

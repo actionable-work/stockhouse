@@ -43,6 +43,12 @@ Errors (`HashError`): `UnsupportedAlgorithm` (prefix other than `sha256:`),
 `InvalidEncoding` (wrong length or characters, or a non-canonical Nix base-32
 string whose unused high bits are set).
 
+`Sha256::parse_sri` separately accepts the SRI form `sha256-<base64>` that
+`nix path-info --json` prints: exactly 44 characters of standard padded
+base64 decoding to 32 bytes. Any other prefix is `UnsupportedAlgorithm`; any
+other payload is `InvalidEncoding`. `Sha256::parse`, and therefore narinfo
+parsing, does not accept SRI.
+
 Nix base-32 follows Nix exactly: for `n` from `len-1` down to `0` it emits the
 character for the 5-bit group starting at bit `5n` of the little-endian digest
 bytes. A 32-byte digest yields 52 characters; `sha256("")` is
@@ -131,3 +137,131 @@ only `StorePath`, `NarHash`, `NarSize` and `References`; `URL`, `Compression`,
 signed hash. Authenticity of compressed NARs rests on Nix, which verifies the
 signed `NarHash` after decompression and rejects the path otherwise. The client
 does not decompress.
+
+## Upload and lease protocol v1
+
+`stockhouse-wire` (`packages/rust/libs/wire`) owns the client-to-server
+upload and lease wire protocol (`PROTOCOL_VERSION = 1`). It is split from
+`stockhouse-proto` to keep both within the crate-size budget and builds on
+its types. It is pure: it renders request bodies and request paths, and
+classifies a response from its status code and body bytes. HTTP,
+credentials and retries belong to `stockhouse-upload`. Servers implement this
+protocol; nothing here comes from a server's code.
+
+All request paths are relative to the private tier base URL `B` (for example
+`https://cache.example.invalid/t/1/`). Upload paths are rendered from typed
+values only, so they never contain `/`, `.` segments or escapes:
+
+| Request | Path |
+| --- | --- |
+| declare | `uploads/<UploadId>` (`POST`) |
+| send the NAR | `uploads/<UploadId>/nar` (`PUT`) |
+| status | `uploads/<UploadId>` (`GET`) |
+| renew a lease | `leases/<MachineId>/<slot>` (`PUT`) |
+
+### Declarations
+
+`UploadDeclaration` is the `POST` body:
+
+```json
+{"version":1,"store_path":"/nix/store/<hash>-<name>","nar_hash":"sha256:<nix32>",
+ "nar_size":1234,"references":["<hash>-<name>"],"deriver":null,"ca":null}
+```
+
+`render` emits exactly these keys in this order, with `nar_hash` in canonical
+`sha256:<nix32>` form, references as basenames in the given order (a
+self-reference included, as Nix records it), `deriver` as a `.drv` basename or
+`null`, and `ca` as a string or `null`. `parse` (used by test fixtures and any
+server written against this crate) is strict and checks, in order:
+
+1. More than 4 MiB of input: `DeclarationError::TooLarge`. Every declaration
+   that rule 4 accepts renders to less than 3 MiB (10 000 references of at
+   most 244 bytes each, plus a 1 KiB `ca`), so the cap never refuses a valid
+   declaration.
+2. Not a JSON object of exactly these keys with these JSON types (an unknown,
+   missing or repeated key included): `DeclarationError::Malformed`.
+3. `version` other than 1: `DeclarationError::UnsupportedVersion`.
+4. A value that breaks its rule: `DeclarationError::InvalidField { field }`.
+   `store_path` must be a store path; `nar_hash` a `Sha256`; `nar_size`
+   greater than zero; `references` at most `MAX_REFERENCES` (10 000) distinct
+   basenames; `deriver` a basename ending in `.drv`; `ca` at most 1024 bytes
+   without control characters.
+
+The constructor `UploadDeclaration::new` applies rule 4, so a rendered
+declaration always parses back to an equal value.
+
+### Replies
+
+Responses carry no `version` field. `parse_reply(kind, status, body)`, where
+`kind` is `Declare`, `Nar` or `Status`, returns an `UploadReply`: either
+`State(UploadState)` (`Open`, `Present`, `Published`) or
+`Refused(UploadRefusal)`. A status and body pair outside its kind's row is
+`ReplyError::Unexpected { status }`. A body over 4 MiB (room for the largest
+valid `missing` list) is `ReplyError::TooLarge`. Bodies are objects with no
+unknown keys.
+
+| Status | Body | `Declare` | `Nar` | `Status` |
+| --- | --- | --- | --- | --- |
+| 200 | `{"state":"present"}` | `State(Present)` | `State(Present)` | `State(Present)` |
+| 200 | `{"state":"published"}` | `State(Published)` | `State(Published)` | `State(Published)` |
+| 200 | `{"state":"open"}` | `State(Open)` | unexpected | `State(Open)` |
+| 400 | `{"error":"bad_request"}` | `BadRequest` | `BadRequest` | unexpected |
+| 400 | `{"error":"verification_failed"}` | `VerificationFailed` | `VerificationFailed` | `VerificationFailed` |
+| 404 | `{"error":"unknown_upload"}` | unexpected | `UnknownUpload` | `UnknownUpload` |
+| 409 | `{"error":"conflict"}` | `Conflict` | `Conflict` | unexpected |
+| 413 | `{"error":"too_large"}` | `TooLarge` | `TooLarge` | unexpected |
+| 422 | `{"error":"missing_references","missing":[…]}` | `MissingReferences` | `MissingReferences` | unexpected |
+| 507 | `{"error":"quota_exceeded"}` | `QuotaExceeded` | `QuotaExceeded` | unexpected |
+| 401 | any body | `Unauthorized` | `Unauthorized` | `Unauthorized` |
+| 503 | any body | `Unavailable` | `Unavailable` | `Unavailable` |
+
+A declaration or status request answered `verification_failed` names an
+upload whose NAR already failed verification; it is permanent. The body of a
+401 or 503 is not read as JSON, because an intermediary may
+answer those. `missing` must be a non-empty list of at most `MAX_REFERENCES`
+distinct store path basenames; otherwise the reply is `Unexpected`. Whether
+the missing names were actually declared is checked by the uploader, which
+knows the declaration.
+
+### Leases
+
+`MachineId` is 16 bytes rendered as 32 lowercase hex characters.
+`MachineId::parse` accepts only that form (`MachineIdError::Invalid`
+otherwise) and `MachineId::from_bytes` builds one from 16 bytes; generating
+the bytes is the caller's job, so the crate stays free of I/O and randomness.
+`LeaseSlot::new(n)` accepts 1 to 10 (`LeaseSlotError::OutOfRange`
+otherwise): slot 1 is the current system, slot 2 the previous system and 3 to
+10 are operator defined.
+
+`LeaseRequest` is the `PUT` body `{"version":1,"store_path":"/nix/store/…"}`,
+rendered in that key order and parsed with the same strictness rules as a
+declaration (`LeaseRequestError::{TooLarge, Malformed, UnsupportedVersion,
+InvalidField}`, 4 KiB limit). `parse_lease_reply(status, body)` returns:
+
+| Status | Body | Result |
+| --- | --- | --- |
+| 200 | `{"state":"renewed"}` | `LeaseReply::Renewed` |
+| 422 | `{"error":"unknown_path"}` | `LeaseReply::Refused(UnknownPath)` |
+| 409 | `{"error":"conflict"}` | `LeaseReply::Refused(Conflict)` |
+| 400 | `{"error":"bad_request"}` | `LeaseReply::Refused(BadRequest)` |
+| 401 | any body | `LeaseReply::Unauthorized` |
+| 503 | any body | `LeaseReply::Unavailable` (also a full machine table) |
+
+Anything else is `ReplyError::Unexpected { status }`, and a body over 64 KiB
+is `ReplyError::TooLarge`.
+
+### Server behaviors the client relies on
+
+These are facts of the protocol as servers implement it, recorded so the
+client's handling is explained:
+
+- A 401 is a constant text response, never JSON; the client never parses it
+  (UPLOAD-012) and only reports the rejected credential.
+- `404 unknown_upload` from the NAR or status request means the server no
+  longer knows the upload: the client declares the path again.
+- Uploads require a credential granted both `cache:read` and `cache:write`;
+  the sign-in configuration requests both.
+- A server whose table of machines is full answers lease renewals with 503,
+  which the client treats as transient.
+- A lease belongs to the account, not the grant: after signing in again under
+  a new grant, the same machine identity's leases rebind to that account.

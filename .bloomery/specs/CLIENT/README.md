@@ -34,7 +34,9 @@ Supported systems are recorded in
 | Recovering a refresh whose reply was lost after the server rotated the token (the client may then be signed out and must log in again) | later client slice |
 | Resending a refresh token whose request got no reply may trip server-side reuse detection (no grace window is required by the protocol), signing the client out | later client slice |
 | Per-user sign-in and per-user isolation of private-tier substitution (sign-in is per machine) | later client slice |
-| Authenticated server upload (sessions, quota reservation, uncertain-reply reconciliation with the server) behind the `Uploader` interface | P2.07, P2.08 |
+| End-to-end upload and lease evidence against a real server (protocol v1 upload, quota and uncertain-reply reconciliation are implemented and qualified against a local fake server) | that server's own drill |
+| Chunk-level upload deduplication, upload ranges or resume | later client slice |
+| A persistent 401 (or quota exhaustion) consumes upload attempts, so a record can fail permanently after about `maxAttempts × backoffMax`; it could defer instead | later client slice |
 | Server NixOS module integration | private server modules (P2.11) |
 | Agent or keyring credential sources beyond systemd credentials and owner-only files | later client slice |
 | Reconciling `stockhouse-proto` with the private P2.08a server types | follow-up after P2.08a |

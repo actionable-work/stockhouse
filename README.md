@@ -38,6 +38,14 @@ not part of this release.
   they expire with one refresh at a time across processes, and revoked by
   `stockhouse-auth logout`. A revoked or signed-out machine gets errors from
   the private cache, never misses.
+- **Server upload and leases**: with `uploader.backend = "server"` the
+  uploader uploads each built path's closure to the private cache, references
+  first, skipping what the server already holds. It streams NARs without
+  buffering them, keeps each path's upload identity across restarts and
+  reconciles a lost reply before sending a NAR again. `stockhouse lease`
+  renews the server's roots for this machine's current and previous system on
+  boot, hourly, daily and after activation, without ever blocking boot or
+  activation.
 - **Credential sources**: credentials come only from a configured systemd
   credential, owner-only file or the signed-in token store. They never enter
   derivations, the Nix store, process arguments, upstream requests to other
@@ -47,12 +55,15 @@ not part of this release.
 
 ## Current limits
 
-- **Sign-in is tested against this repository's fake server only**, not a
-  real server. Sign-in is per machine, not per user.
-- **No server upload yet.** The default uploader backend keeps built paths
-  queued until authenticated server upload exists. The `nix-copy` backend
-  copies paths to a local `file://` cache and is meant for development and
-  tests.
+- **Sign-in, upload and leases are qualified against this repository's fake
+  servers only**, not a real server. Sign-in is per machine, not per user.
+- **Builds never wait on the cache.** The module sets Nix's `fallback`, so
+  when the proxy answers 503 (signed out, revoked, or the server is down)
+  Nix builds the path locally. Within 60 seconds of a new access token, a
+  401 is not retried with a forced refresh; it reads as a temporary outage.
+- **Upload is opt-in.** The default uploader backend keeps built paths queued
+  until a backend is configured. The `nix-copy` backend copies paths to a
+  local `file://` cache and is meant for development and tests.
 - **Supported systems:** `x86_64-linux` NixOS with systemd only, tested in
   NixOS VMs with Nix 2.34.8 and 2.31.5. Other Linux systems, distributions
   and operating systems are not claimed.
@@ -83,15 +94,16 @@ Add the flake to a NixOS configuration:
             };
           };
           services.stockhouse.uploader.enable = true;
-          # Optional: sign the private tier in to a server.
+          # Optional: sign the private tier in to a server and upload to it.
           # services.stockhouse.proxy.private = { url = "https://cache.example.invalid/t/1/"; trustedKeys = [ … ]; };
           # services.stockhouse.auth = {
           #   enable = true;
           #   server = "https://example.invalid/";
           #   endpoints = { authorization = "…"; token = "…"; deviceAuthorization = "…"; revocation = "…"; };
           #   clientId = "…";
-          #   scopes = [ "cache:read" ];
+          #   scopes = [ "cache:read" "cache:write" ];
           # };
+          # services.stockhouse.uploader.backend = "server";
           # then, as root: stockhouse-auth login --device
         }
       ];

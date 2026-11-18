@@ -18,6 +18,7 @@ const USAGE: &str = "usage: stockhouse <command>
   uploader --config <file> [--once]
   post-build-hook --queue <dir>
   status --queue <dir> | status --config <auth.toml>
+  lease --config <file>
   login --config <auth.toml> [--device]
   logout --config <auth.toml>
   refresh --config <auth.toml>

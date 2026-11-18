@@ -8,6 +8,7 @@ args:
     "CLIENT-INTEGRATION-VM-010"
     "CLIENT-INTEGRATION-VM-015"
     "CLIENT-INTEGRATION-VM-016"
+    "CLIENT-INTEGRATION-MODULE-026"
   ];
   script = ''
     # The nix-copy uploader would re-substitute deleted fixture paths.
@@ -65,6 +66,9 @@ args:
         machine.fail(f"nix-store --check-validity {hidden}")
         code, out = machine.execute(f"nix-store -v --max-jobs 0 --realise {hidden} 2>&1")
         assert code != 0 and "503" in out, out
+        # MODULE-026: while the proxy answers 503, a local build still succeeds.
+        expr = 'derivation { name = "vm-fallback"; system = builtins.currentSystem; builder = "/bin/sh"; args = [ "-c" "echo fallback > $out" ]; }'
+        machine.succeed(f"nix-build --no-out-link -E '{expr}'")
         device_login()
         machine.succeed(f"nix-store --max-jobs 0 --realise {hidden}")
   '';

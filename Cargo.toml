@@ -10,6 +10,8 @@ members = [
   "packages/rust/libs/proxy",
   "packages/rust/libs/signin",
   "packages/rust/libs/token_store",
+  "packages/rust/libs/upload",
+  "packages/rust/libs/wire",
 ]
 resolver = "2"
 
@@ -59,6 +61,8 @@ stockhouse-proto = { default-features = false, path = "packages/rust/libs/proto"
 stockhouse-proxy = { default-features = false, path = "packages/rust/libs/proxy" }
 stockhouse-signin = { default-features = false, path = "packages/rust/libs/signin" }
 stockhouse-token-store = { default-features = false, path = "packages/rust/libs/token_store" }
+stockhouse-upload = { default-features = false, path = "packages/rust/libs/upload" }
+stockhouse-wire = { default-features = false, path = "packages/rust/libs/wire" }
 tokio = { default-features = false, features = [
   "fs",
   "io-util",

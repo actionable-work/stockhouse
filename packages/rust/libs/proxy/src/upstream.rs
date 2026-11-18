@@ -63,6 +63,7 @@ impl Upstream {
     pub(crate) fn http(base: Url, timeout: Duration) -> Result<Self, reqwest::Error> {
         let mut builder = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
+            .no_proxy()
             .connect_timeout(timeout)
             .read_timeout(timeout);
         if base.scheme() == "http" {

@@ -33,6 +33,7 @@ pub fn form(fields: &[(&str, &str)]) -> Zeroizing<String> {
 fn client(timeout: Duration, url: &Url) -> Result<Client, Failure> {
     let mut builder = Client::builder()
         .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
         .connect_timeout(timeout)
         .read_timeout(timeout)
         // A total bound too, so a slowly trickling reply cannot hold the
