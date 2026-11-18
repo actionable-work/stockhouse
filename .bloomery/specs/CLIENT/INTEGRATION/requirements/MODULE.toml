@@ -1,0 +1,100 @@
+group = "MODULE"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-001"
+title = "The flake exports the client module"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the flake is evaluated"
+system = "flake"
+action = "export `nixosModules.default` and `nixosModules.client` as the same client module"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-002"
+title = "The proxy runs as a sandboxed dynamic-user service"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`services.stockhouse.proxy.enable` is true"
+system = "NixOS module"
+action = "define `stockhouse-proxy.service` with `DynamicUser` and `Restart = on-failure`, running `stockhouse proxy --config` on the generated configuration"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-003"
+title = "Credential files load through systemd credentials"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a proxy tier sets `credentialFile`"
+system = "NixOS module"
+action = "add `LoadCredential = <tier>:<path>` and generate `credential = { systemd = \"<tier>\" }` so the configuration contains the tier name but no credential value"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-004"
+title = "Store-path or relative credential files are rejected"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a proxy tier sets `credentialFile` to a relative path or a path under `/nix/store`"
+system = "NixOS module"
+action = "fail evaluation with an assertion naming the tier"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-005"
+title = "Non-loopback proxy addresses are rejected"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`services.stockhouse.proxy.address` is not a loopback address"
+system = "NixOS module"
+action = "fail evaluation with an assertion"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-006"
+title = "Nix uses the proxy as its only substituter"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`proxy.configureNix` is true"
+system = "NixOS module"
+action = "force `nix.settings.substituters` to the proxy URL alone and add every tier's trusted keys to `nix.settings.trusted-public-keys`"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-007"
+title = "The uploader runs as its own user"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`services.stockhouse.uploader.enable` is true"
+system = "NixOS module"
+action = "define `stockhouse-uploader.service` under the static `stockhouse` user with `StateDirectory = stockhouse` and `Restart = always`, running `stockhouse uploader --config` on the generated configuration"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-008"
+title = "The post-build hook is installed"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`uploader.configureHook` is true"
+system = "NixOS module"
+action = "set `nix.settings.post-build-hook` to a store script that runs `stockhouse post-build-hook` with the configured queue directory and ignores its exit status"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-009"
+title = "The proxy unit is hardened"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "`services.stockhouse.proxy.enable` is true"
+system = "NixOS module"
+action = "set `ProtectSystem = strict`, `NoNewPrivileges`, `PrivateTmp` and `RestrictAddressFamilies = AF_INET AF_INET6 AF_UNIX` on `stockhouse-proxy.service`"

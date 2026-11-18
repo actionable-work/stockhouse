@@ -1,0 +1,133 @@
+group = "RESCAN"
+
+[[requirements]]
+id = "CLIENT-INGEST-RESCAN-001"
+title = "Overflow triggers a rescan when capacity is free"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "an uploader pass finds an overflow marker while `pending/` holds fewer than `max_pending` records"
+system = "uploader pass"
+action = "run a rescan before uploading"
+
+[[requirements]]
+id = "CLIENT-INGEST-RESCAN-011"
+title = "A full queue skips overflow rescans"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "an uploader pass finds an overflow marker while `pending/` holds `max_pending` records"
+system = "uploader pass"
+action = "not run an overflow rescan and keep overflow active"
+
+[[requirements]]
+id = "CLIENT-INGEST-RESCAN-002"
+title = "A rescan enqueues missed paths"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a rescan's scanner returns candidates"
+system = "rescan"
+action = "enqueue each candidate that is neither uploaded, pending nor failed without touching the overflow markers"
+
+[[requirements]]
+id = "CLIENT-INGEST-RESCAN-003"
+title = "A complete rescan clears overflow"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a rescan with a store scanner handles every candidate"
+system = "rescan"
+action = "delete the overflow marker it took over so overflow is no longer active"
+
+[[requirements]]
+id = "CLIENT-INGEST-RESCAN-004"
+title = "A rescan that reaches capacity keeps overflow"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a rescan reaches `max_pending` before handling every candidate"
+system = "rescan"
+action = "stop enqueueing and keep overflow active, creating the overflow marker when an interval rescan had none"
+
+[[requirements]]
+id = "CLIENT-INGEST-RESCAN-005"
+title = "Overflow during a rescan stays visible"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a producer overflows while a rescan is running"
+system = "rescan"
+action = "leave the new overflow marker in place after the rescan completes"
+
+[[requirements]]
+id = "CLIENT-INGEST-RESCAN-006"
+title = "A failed scan keeps overflow"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the scanner fails"
+system = "rescan"
+action = "return `ScanError` and keep overflow active"
+
+[[requirements]]
+id = "CLIENT-INGEST-RESCAN-010"
+title = "The none scanner never clears overflow"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a rescan runs with the `none` scanner while overflow is active"
+system = "rescan"
+action = "keep overflow active"
+
+[[requirements]]
+id = "CLIENT-INGEST-RESCAN-007"
+title = "Rescans also run periodically"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "`rescan_interval_secs` has elapsed since the last rescan and there is no overflow"
+system = "uploader pass"
+action = "run a rescan"
+
+[[requirements]]
+id = "CLIENT-INGEST-RESCAN-008"
+title = "The Nix scanner selects locally built paths"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the `nix-path-info` scanner parses `nix path-info --json --all` stdout as an object keyed by full store path or as a version 2 object with an `info` map keyed by basename"
+system = "scanner"
+action = "return the store paths whose `ultimate` flag is true, treating a missing flag as false and excluding `.drv` paths"
+
+[[requirements]]
+id = "CLIENT-INGEST-RESCAN-009"
+title = "Unrecognized scanner output is an error"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the `nix-path-info` scanner receives output that is not one of the known JSON shapes, exceeds 256 MiB or comes from a command that fails to start or exits nonzero"
+system = "scanner"
+action = "return `ScanError::Format`, `ScanError::TooLarge` or `ScanError::Command` respectively"
+
+[[requirements]]
+id = "CLIENT-INGEST-RESCAN-012"
+title = "The Nix scanner passes only fixed arguments"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the `nix-path-info` scanner runs its command"
+system = "scanner"
+action = "pass exactly `--extra-experimental-features`, `nix-command`, `path-info`, `--json` and `--all` as arguments"

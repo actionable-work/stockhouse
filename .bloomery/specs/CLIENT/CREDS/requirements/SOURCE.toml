@@ -1,0 +1,56 @@
+group = "SOURCE"
+
+[[requirements]]
+id = "CLIENT-CREDS-SOURCE-001"
+title = "Unconfigured credentials are not discovered"
+manual = false
+design = "design/credentials.md"
+[requirements.ears]
+type = "event"
+trigger = "a credential is required but no credential source is configured"
+system = "credential source resolver"
+action = "return `CredentialError::NotConfigured` without reading any default location"
+
+[[requirements]]
+id = "CLIENT-CREDS-SOURCE-002"
+title = "Credentials are re-read on every use"
+manual = false
+design = "design/credentials.md"
+[requirements.ears]
+type = "event"
+trigger = "a file-backed credential changes between two uses"
+system = "credential source"
+action = "return the current file content on the later use"
+
+[[requirements]]
+id = "CLIENT-CREDS-SOURCE-003"
+title = "systemd credentials resolve inside CREDENTIALS_DIRECTORY"
+manual = false
+design = "design/credentials.md"
+[requirements.ears]
+type = "event"
+trigger = "a systemd credential source with a valid name is used while `CREDENTIALS_DIRECTORY` is set"
+system = "systemd credential source"
+action = "read `$CREDENTIALS_DIRECTORY/<name>` with the symlink, regular-file, size and content checks but without the owner and mode checks"
+
+[[requirements]]
+id = "CLIENT-CREDS-SOURCE-005"
+title = "systemd credentials need a directory and a plain name"
+manual = false
+design = "design/credentials.md"
+[requirements.ears]
+type = "event"
+trigger = "a systemd credential source is used while `CREDENTIALS_DIRECTORY` is unset, or with an empty name, `.`, `..` or a name containing `/`"
+system = "systemd credential source"
+action = "return `CredentialError::NotConfigured` or `CredentialError::InvalidName` respectively without opening any file"
+
+[[requirements]]
+id = "CLIENT-CREDS-SOURCE-004"
+title = "The grant flow is deferred"
+manual = false
+design = "design/credentials.md"
+[requirements.ears]
+type = "event"
+trigger = "login, logout or refresh is requested"
+system = "deferred grant flow"
+action = "return `GrantError::Unavailable` naming dependency `P2.06` without network access or local state changes"

@@ -1,0 +1,45 @@
+group = "HASH"
+
+[[requirements]]
+id = "CLIENT-PROTO-HASH-001"
+title = "SHA-256 parses from Nix base-32 and renders canonically"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a `sha256:` hash with 52 Nix base-32 characters is parsed"
+system = "hash parser"
+action = "decode it with Nix's base-32 bit order and render it back as the identical `sha256:<nix32>` text"
+
+[[requirements]]
+id = "CLIENT-PROTO-HASH-002"
+title = "SHA-256 parses from hex and renders as Nix base-32"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a `sha256:` hash with 64 lowercase hex characters is parsed"
+system = "hash parser"
+action = "decode it to the same digest as its Nix base-32 form and render it as `sha256:<nix32>`"
+
+[[requirements]]
+id = "CLIENT-PROTO-HASH-003"
+title = "Hash algorithms other than SHA-256 are rejected"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a hash is parsed whose prefix is not `sha256:`"
+system = "hash parser"
+action = "return `HashError::UnsupportedAlgorithm`"
+
+[[requirements]]
+id = "CLIENT-PROTO-HASH-004"
+title = "Badly encoded SHA-256 values are rejected"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a `sha256:` hash is parsed with a length other than 52 or 64, a character outside its encoding, or a non-canonical base-32 value with unused high bits set"
+system = "hash parser"
+action = "return `HashError::InvalidEncoding`"

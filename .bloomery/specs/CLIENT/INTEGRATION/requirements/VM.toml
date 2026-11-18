@@ -1,0 +1,133 @@
+group = "VM"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-001"
+title = "The proxy listens only on loopback"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a VM with the client module boots"
+system = "proxy service"
+action = "become active and listen on `127.0.0.1:8484` and on no other address"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-002"
+title = "A build is ingested and uploaded"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a derivation is built in the VM"
+system = "installed client"
+action = "enqueue its output through the post-build hook and upload it with the `nix-copy` backend to the private file tier"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-003"
+title = "A signed uploaded closure substitutes through the proxy"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "an uploaded output signed by the daemon's fixture key is deleted from the VM store and realised again"
+system = "installed client"
+action = "substitute it from the private tier through the proxy"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-004"
+title = "Tampered cache content is not substituted"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the private tier's narinfo or NAR for an uploaded output is altered and the output is realised again"
+system = "installed client"
+action = "answer 502 for the altered narinfo, fail substitution of the altered NAR, and contact no other substituter"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-011"
+title = "Denied and unavailable tiers do not fall through"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "real Nix realises, without a known deriver, store paths whose shared-tier lookup answers 403 or 500"
+system = "installed client"
+action = "fail the substitution with the proxy answering 503 and no request reaching any later tier"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-005"
+title = "An unwritable queue does not fail builds"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the queue's pending directory is made unwritable for its owner when a derivation is built"
+system = "installed client"
+action = "let the build succeed with no pending record created"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-006"
+title = "Pending uploads survive reboot with their identity"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a derivation is built while the uploader is stopped and the VM then reboots"
+system = "installed client"
+action = "keep the pending record across the reboot and upload it with the identity assigned before the reboot"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-007"
+title = "Overflow is visible in status"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "more outputs are built than `maxPending` allows while the uploader is stopped"
+system = "installed client"
+action = "report overflow as active with a nonzero dropped count in `stockhouse status`"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-012"
+title = "Overflow is reconciled by rescan"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the uploader starts after overflow"
+system = "installed client"
+action = "rescan with `nix path-info`, upload the dropped outputs and report overflow as inactive"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-008"
+title = "Credentials stay out of arguments, units and configuration"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a credentialed shared tier is configured from a runtime file"
+system = "installed client"
+action = "send the credential as a bearer header to that tier while the proxy's command line, unit files and generated configuration do not contain it"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-009"
+title = "Configuration upgrade and rollback apply"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the VM switches to a specialisation with a changed proxy priority and then back"
+system = "installed client"
+action = "restart the proxy with the new priority, serve the original priority after rollback, and keep the queue readable throughout"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-010"
+title = "Both pinned Nix versions are qualified"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the VM tests run"
+system = "VM test suite"
+action = "run every VM requirement once with Nix 2.34.8 and once with Nix 2.31.5 as both client and daemon"

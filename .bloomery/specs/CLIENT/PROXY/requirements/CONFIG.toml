@@ -1,0 +1,111 @@
+group = "CONFIG"
+
+[[requirements]]
+id = "CLIENT-PROXY-CONFIG-001"
+title = "A valid proxy configuration loads"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a proxy configuration with version 1, a loopback listen address and at least one valid tier is parsed"
+system = "proxy configuration parser"
+action = "return the listen address, priority, timeout and each configured tier with its URL, trusted keys and credential source"
+
+[[requirements]]
+id = "CLIENT-PROXY-CONFIG-002"
+title = "Unknown configuration versions are rejected"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a proxy configuration declares a version other than 1"
+system = "proxy configuration parser"
+action = "return `ConfigError::UnsupportedVersion`"
+
+[[requirements]]
+id = "CLIENT-PROXY-CONFIG-003"
+title = "Non-loopback listen addresses are rejected"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a proxy configuration's `listen` is not a loopback socket address"
+system = "proxy configuration parser"
+action = "return `ConfigError::NonLoopbackListen`"
+
+[[requirements]]
+id = "CLIENT-PROXY-CONFIG-004"
+title = "At least one tier is required"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a proxy configuration has no private, shared or public tier"
+system = "proxy configuration parser"
+action = "return `ConfigError::NoTiers`"
+
+[[requirements]]
+id = "CLIENT-PROXY-CONFIG-005"
+title = "Every tier needs valid trusted keys"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a tier has no trusted keys, a key that does not parse, or two keys with the same name"
+system = "proxy configuration parser"
+action = "return `ConfigError::MissingTrustedKeys` or `ConfigError::InvalidTrustedKey` naming the tier"
+
+[[requirements]]
+id = "CLIENT-PROXY-CONFIG-006"
+title = "The public tier cannot carry a credential"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "the public tier declares a credential"
+system = "proxy configuration parser"
+action = "return `ConfigError::CredentialOnPublicTier`"
+
+[[requirements]]
+id = "CLIENT-PROXY-CONFIG-007"
+title = "File tiers cannot carry a credential"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a `file://` tier declares a credential"
+system = "proxy configuration parser"
+action = "return `ConfigError::CredentialOnFileTier` naming the tier"
+
+[[requirements]]
+id = "CLIENT-PROXY-CONFIG-008"
+title = "Credentials are never sent in cleartext off-host"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a tier with a credential uses `http://` to a host that is not a loopback address"
+system = "proxy configuration parser"
+action = "return `ConfigError::CleartextCredential` naming the tier"
+
+[[requirements]]
+id = "CLIENT-PROXY-CONFIG-009"
+title = "Unsupported tier URLs are rejected"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a tier URL has a scheme other than `file`, `http` or `https`, has a query or fragment, or does not end in `/`"
+system = "proxy configuration parser"
+action = "return `ConfigError::InvalidUrl` naming the tier"
+
+[[requirements]]
+id = "CLIENT-PROXY-CONFIG-010"
+title = "Configuration cannot hold credential values"
+manual = false
+design = "design/proxy.md"
+[requirements.ears]
+type = "event"
+trigger = "a proxy configuration contains an unknown field, such as a `token` value"
+system = "proxy configuration parser"
+action = "return `ConfigError::Parse`"

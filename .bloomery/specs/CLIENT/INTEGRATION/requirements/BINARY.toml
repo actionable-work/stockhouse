@@ -1,0 +1,34 @@
+group = "BINARY"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-BINARY-001"
+title = "Binary crates hold only a manifest and main"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a binary crate is added or changed under `packages/rust/bins/`"
+system = "each binary crate"
+action = "contain only `Cargo.toml` and `src/main.rs`, with no library target, modules, tests, build script, assets or dev-dependencies"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-BINARY-002"
+title = "Binary main only forwards to the entry crate"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a binary crate's `main.rs` is added or changed"
+system = "each binary crate's `main.rs`"
+action = "consist of one `fn main` that passes the collected process arguments to a single library `main` and returns its `ExitCode`"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-BINARY-003"
+title = "Binary crates depend only on their entry crate"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a binary crate's manifest declares dependencies"
+system = "each binary crate's manifest"
+action = "depend only on its entry-point library crate"

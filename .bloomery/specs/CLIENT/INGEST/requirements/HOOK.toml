@@ -1,0 +1,100 @@
+group = "HOOK"
+
+[[requirements]]
+id = "CLIENT-INGEST-HOOK-001"
+title = "The hook enqueues every built output"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the post-build hook runs with `OUT_PATHS` listing valid store paths and an initialized queue"
+system = "post-build hook"
+action = "enqueue each listed path using the capacity recorded in the queue's `LIMITS`"
+
+[[requirements]]
+id = "CLIENT-INGEST-HOOK-002"
+title = "Invalid output paths are skipped"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "`OUT_PATHS` contains an entry that is not a valid store path"
+system = "post-build hook"
+action = "skip that entry with one stderr line and enqueue the remaining valid paths"
+
+[[requirements]]
+id = "CLIENT-INGEST-HOOK-003"
+title = "An unusable queue never fails the build"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the hook's queue directory is missing, uninitialized, of an unsupported format or not writable"
+system = "post-build hook"
+action = "write one stderr line, create nothing and exit 0"
+
+[[requirements]]
+id = "CLIENT-INGEST-HOOK-004"
+title = "The hook always exits successfully"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the post-build hook encounters overflow, an I/O error, invalid input or a panic"
+system = "post-build hook"
+action = "exit with status 0"
+
+[[requirements]]
+id = "CLIENT-INGEST-HOOK-005"
+title = "Hook work per build is bounded"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "`OUT_PATHS` lists more than 1024 paths"
+system = "post-build hook"
+action = "enqueue at most 1024 paths and count every remaining path as overflow"
+
+[[requirements]]
+id = "CLIENT-INGEST-HOOK-006"
+title = "The hook does not wait for uploads"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the post-build hook runs while no uploader is running"
+system = "post-build hook"
+action = "return after recording pending records, without performing or waiting for any upload"
+
+[[requirements]]
+id = "CLIENT-INGEST-HOOK-007"
+title = "The hook never creates the queue"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the post-build hook runs against a queue directory without `FORMAT`"
+system = "post-build hook"
+action = "leave the directory without creating a queue layout"
+
+[[requirements]]
+id = "CLIENT-INGEST-HOOK-008"
+title = "The hook refuses symlinked or root-owned queues"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the hook's queue path is a symbolic link, not a directory, or has owner UID 0 or group GID 0"
+system = "post-build hook"
+action = "write one stderr line, touch nothing in the queue and exit 0"
+
+[[requirements]]
+id = "CLIENT-INGEST-HOOK-009"
+title = "The root-run hook acts only as the queue owner"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the post-build hook runs as root against a queue directory owned by a non-root user"
+system = "post-build hook"
+action = "switch to the queue directory's `st_uid` and `st_gid` with no supplementary groups before touching the queue, so the queue owner's own permissions govern every write, and on any failure to switch write one stderr line, touch nothing and exit 0"

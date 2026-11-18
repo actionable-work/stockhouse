@@ -1,0 +1,15 @@
+[dependencies]
+serde_json = { workspace = true }
+stockhouse-credentials = { workspace = true }
+stockhouse-ingest = { workspace = true }
+stockhouse-proto = { workspace = true }
+stockhouse-proxy = { workspace = true }
+tokio = { workspace = true }
+
+[package]
+name = "stockhouse-cli"
+publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true

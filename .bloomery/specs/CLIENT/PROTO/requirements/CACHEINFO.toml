@@ -1,0 +1,67 @@
+group = "CACHEINFO"
+
+[[requirements]]
+id = "CLIENT-PROTO-CACHEINFO-001"
+title = "Valid nix-cache-info parses"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a nix-cache-info with `StoreDir: /nix/store` and optional valid `WantMassQuery` and `Priority` is parsed"
+system = "nix-cache-info parser"
+action = "return the store directory, mass-query flag and priority with absent optional fields reported as absent"
+
+[[requirements]]
+id = "CLIENT-PROTO-CACHEINFO-002"
+title = "Foreign store directories are rejected"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a nix-cache-info declares a `StoreDir` other than `/nix/store`"
+system = "nix-cache-info parser"
+action = "return `CacheInfoError::StoreDirMismatch` with the declared directory"
+
+[[requirements]]
+id = "CLIENT-PROTO-CACHEINFO-003"
+title = "nix-cache-info rejects unknown, duplicate and missing fields"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a nix-cache-info contains an unknown key, repeats a key, or lacks `StoreDir`"
+system = "nix-cache-info parser"
+action = "return `CacheInfoError::UnknownField`, `DuplicateField` or `MissingField` respectively"
+
+[[requirements]]
+id = "CLIENT-PROTO-CACHEINFO-004"
+title = "nix-cache-info rejects invalid values"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a nix-cache-info has a `WantMassQuery` other than `0` or `1` or a `Priority` that is not a decimal `u32`"
+system = "nix-cache-info parser"
+action = "return `CacheInfoError::InvalidField` naming the field"
+
+[[requirements]]
+id = "CLIENT-PROTO-CACHEINFO-006"
+title = "nix-cache-info rejects malformed input"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a nix-cache-info has a line without `: `, is larger than 4 KiB or is not valid UTF-8"
+system = "nix-cache-info parser"
+action = "return `CacheInfoError::MalformedLine`, `TooLarge` or `NotUtf8` respectively"
+
+[[requirements]]
+id = "CLIENT-PROTO-CACHEINFO-005"
+title = "Rendered nix-cache-info round-trips"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a nix-cache-info value is rendered"
+system = "nix-cache-info renderer"
+action = "emit text that parses back to an equal value"

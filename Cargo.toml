@@ -1,0 +1,71 @@
+[workspace]
+members = [
+  "packages/rust/bins/stockhouse",
+  "packages/rust/libs/cli",
+  "packages/rust/libs/credentials",
+  "packages/rust/libs/ingest",
+  "packages/rust/libs/proto",
+  "packages/rust/libs/proxy",
+]
+resolver = "2"
+
+[workspace.dependencies]
+base64 = { default-features = false, features = ["alloc"], version = "=0.22.1" }
+bytes = { default-features = false, features = ["std"], version = "=1.12.1" }
+ed25519-dalek = { default-features = false, version = "=3.0.0" }
+futures-util = { default-features = false, features = [
+  "std",
+], version = "=0.3.34" }
+http = { default-features = false, features = ["std"], version = "=1.5.0" }
+http-body-util = { default-features = false, version = "=0.1.5" }
+hyper = { default-features = false, features = [
+  "http1",
+  "server",
+], version = "=1.12.0" }
+hyper-util = { default-features = false, features = [
+  "tokio",
+], version = "=0.1.21" }
+libc = { default-features = false, version = "=0.2.191" }
+reqwest = { default-features = false, features = [
+  "rustls",
+  "stream",
+], version = "=0.13.5" }
+serde = { default-features = false, features = [
+  "derive",
+  "std",
+], version = "=1.0.229" }
+serde_json = { default-features = false, features = [
+  "std",
+], version = "=1.0.154" }
+sha2 = { default-features = false, version = "=0.11.1" }
+stockhouse-cli = { default-features = false, path = "packages/rust/libs/cli" }
+stockhouse-credentials = { default-features = false, path = "packages/rust/libs/credentials" }
+stockhouse-ingest = { default-features = false, path = "packages/rust/libs/ingest" }
+stockhouse-proto = { default-features = false, path = "packages/rust/libs/proto" }
+stockhouse-proxy = { default-features = false, path = "packages/rust/libs/proxy" }
+tokio = { default-features = false, features = [
+  "fs",
+  "io-util",
+  "macros",
+  "net",
+  "rt-multi-thread",
+  "sync",
+  "time",
+], version = "=1.54.1" }
+toml = { default-features = false, features = [
+  "parse",
+  "serde",
+  "std",
+], version = "=1.2.1" }
+uuid = { default-features = false, features = [
+  "std",
+  "v7",
+], version = "=1.29.3" }
+zeroize = { default-features = false, features = ["alloc"], version = "=1.9.1" }
+
+[workspace.package]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+repository = "https://github.com/actionable-work/stockhouse"
+version = "0.1.0"
