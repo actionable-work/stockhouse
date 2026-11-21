@@ -86,7 +86,7 @@ design = "design/proto.md"
 type = "event"
 trigger = "a reply to a declaration is classified"
 system = "reply classifier"
-action = "map 200 `present`, `published` and `open` to their states and 400 `bad_request`, 400 `verification_failed`, 409 `conflict`, 413 `too_large`, 422 `missing_references`, 507 `quota_exceeded`, 401 and 503 to their refusals"
+action = "map 200 `present`, `published` and `open` to their states and 400 `bad_request`, 400 `verification_failed`, 404 `unknown_upload`, 409 `conflict`, 413 `too_large`, 422 `missing_references`, 507 `quota_exceeded`, 401 and 503 to their refusals"
 
 [[requirements]]
 id = "CLIENT-PROTO-UPLOAD-009"

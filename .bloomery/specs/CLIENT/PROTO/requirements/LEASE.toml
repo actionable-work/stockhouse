@@ -76,3 +76,25 @@ type = "event"
 trigger = "a lease reply has a status and body pair outside the lease table, an unknown key, or a body over 64 KiB"
 system = "lease reply classifier"
 action = "return `ReplyError::Unexpected` with the status, or `ReplyError::TooLarge` for the oversized body"
+
+[[requirements]]
+id = "CLIENT-PROTO-LEASE-008"
+title = "Lease batches render canonically and round-trip"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a lease batch of 1 to 64 distinct `(machine, slot)` entries is rendered and parsed"
+system = "lease batch codec"
+action = "emit an object of `version` 2 then `leases`, each entry with exactly `machine`, `slot` and `store_path` in that order, at most 64 KiB, and parse it back to an equal value"
+
+[[requirements]]
+id = "CLIENT-PROTO-LEASE-009"
+title = "Lease batch results classify per entry"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a result of a lease batch is classified"
+system = "batch reply classifier"
+action = "map state `renewed` to `Renewed`, errors `unknown_path` and `conflict` to `Refused` with that reason and `machines_full` to `MachinesFull`, and any other state or error, or a result whose `machine` and `slot` differ from its entry, to `ReplyError::Unexpected` with status 200"

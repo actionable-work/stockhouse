@@ -263,3 +263,14 @@ type = "event"
 trigger = "`Queue::forget_done` is called for a path"
 system = "queue"
 action = "remove that path's done record so the path is no longer reported uploaded"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-025"
+title = "Renewed identities are durable and kept by the record"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a path identity is renewed with `Queue::renew_identity`, including a crash between its writes"
+system = "queue and uploader worker"
+action = "write a fresh `UploadId` into the pending record (for the record's own path) and then into the `uploads/` entry with `nar_sent = false`, both durable before returning, repair a torn renewal in favor of the record, and apply the job outcome and ledger entry to the identity stored in the pending record"

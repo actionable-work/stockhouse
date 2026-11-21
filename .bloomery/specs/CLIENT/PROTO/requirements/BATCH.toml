@@ -1,0 +1,232 @@
+group = "BATCH"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-001"
+title = "v2 request paths are rendered from typed values"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a v2 request path is rendered"
+system = "v2 path renderer"
+action = "return `v2/declare`, `v2/nar/<UploadId>`, `v2/publish`, `v2/status` and `v2/leases`"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-002"
+title = "Declare batches render canonically"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a declare batch is rendered"
+system = "declare batch renderer"
+action = "emit an object of `version` 2 then `uploads`, each entry with exactly `id`, `store_path`, `nar_hash`, `nar_size`, `references`, `deriver` and `ca` in that order and the v1 value rendering, entries in the order pushed"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-003"
+title = "The declare batch builder stays within the limits"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "an entry is pushed onto a declare batch that already holds 1000 entries or whose rendering would then exceed 8 MiB"
+system = "`DeclareBatch::push`"
+action = "return `BatchFull` and leave the batch unchanged, while an empty batch accepts any valid entry including one at the 10 000-reference limit"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-004"
+title = "Built declare batches round-trip"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a declare batch built with `DeclareBatch::push` is rendered and parsed"
+system = "declare batch codec"
+action = "produce at most 8 MiB of JSON that parses back to an equal batch, including at 1000 entries"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-005"
+title = "Oversized batch requests are refused before parsing"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "declare batch input over 8 MiB, or id batch or lease batch input over 64 KiB, is parsed"
+system = "batch request parser"
+action = "return `TooLarge` without parsing JSON"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-006"
+title = "Batch requests refuse unknown, missing and mistyped keys"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a batch request is parsed that is not an object of exactly its keys, or has an entry with an unknown, missing or repeated key or a value of the wrong JSON type"
+system = "batch request parser"
+action = "return `Malformed`"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-007"
+title = "Batch requests refuse other versions"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a well-formed batch request with a `version` other than 2 is parsed"
+system = "batch request parser"
+action = "return `UnsupportedVersion`"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-008"
+title = "Batch requests hold 1 to their maximum entries"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a well-formed batch request with no entries, or more than 1000 upload entries or 64 lease entries, is parsed"
+system = "batch request parser"
+action = "return `Count`"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-009"
+title = "Batch request entries are valid"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a batch request entry has a value that breaks its v1 rule or an identity that does not parse"
+system = "batch request parser"
+action = "return `InvalidField` with the entry index and field name"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-010"
+title = "Batch request entries are distinct"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a declare batch repeats an `id` or `store_path`, an id batch repeats an identity, or a lease batch repeats a `(machine, slot)` pair"
+system = "batch request parser"
+action = "return `Duplicate` with the index of the later entry"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-011"
+title = "Id batches render and round-trip"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "an id batch of 1 to 1000 distinct upload identities is rendered and parsed"
+system = "id batch codec"
+action = "emit `{\"version\":2,\"uploads\":[…]}` with the identities in the given order, at most 64 KiB, and parse it back to an equal value"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-012"
+title = "Batch replies classify at request level"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a reply to a declare, publish, status or lease batch is classified"
+system = "batch reply classifier"
+action = "map 200 with a `results` object to `Results`, 400 `bad_request` and 413 `too_large` to `Refused`, and 404, 401, 429 and 503 with any body to `NotSupported`, `Unauthorized`, `Busy` and `Unavailable` without reading their bodies"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-013"
+title = "Retry-After is parsed as bounded delta-seconds"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a 429 or 503 reply carries a `Retry-After` header"
+system = "batch and NAR reply classifiers"
+action = "carry it as `retry_after` when it is decimal delta-seconds from 0 to 86400, and carry `None` for an absent header, an HTTP date or any other value"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-014"
+title = "Batch results match their request entries"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a 200 batch reply has a different number of results than the request had entries, a result whose echoed identity differs from the entry at its position, an unknown key or a `version` key"
+system = "batch reply classifier"
+action = "return `ReplyError::Unexpected` with status 200"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-015"
+title = "Declare results classify per entry"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a result of a declare batch is classified"
+system = "batch reply classifier"
+action = "map states `open`, `verified`, `present` and `published` and errors `conflict`, `too_large`, `verification_failed`, `quota_exceeded` and `unknown_upload` to their results, and any other state or error to `ReplyError::Unexpected` with status 200"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-016"
+title = "Publish results classify per entry"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a result of a publish batch is classified"
+system = "batch reply classifier"
+action = "map states `open`, `present` and `published` and errors `conflict`, `verification_failed`, `quota_exceeded`, `unknown_upload` and `missing_references` to their results, and any other state or error, including `verified`, to `ReplyError::Unexpected` with status 200"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-017"
+title = "Status results classify per entry"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a result of a status batch is classified"
+system = "batch reply classifier"
+action = "map states `open`, `verified`, `present` and `published` and errors `verification_failed` and `unknown_upload` to their results, and any other state or error to `ReplyError::Unexpected` with status 200"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-018"
+title = "Missing-reference lists in batch replies are bounded and valid"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a `missing_references` publish result has an empty `missing` list, a duplicate, a value that is not a store path basename, or the reply lists more than 10 000 names in total"
+system = "batch reply classifier"
+action = "return `ReplyError::Unexpected` with status 200"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-019"
+title = "Oversized batch replies are refused"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a batch reply body larger than 4 MiB is classified"
+system = "batch reply classifier"
+action = "return `ReplyError::TooLarge`"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-020"
+title = "v2 NAR replies classify by status and body"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a reply to a v2 NAR transfer is classified"
+system = "v2 NAR reply classifier"
+action = "map 200 `verified`, `present` and `published` to their states; 400 `bad_request` and `verification_failed`, 404 `unknown_upload`, 409 `conflict`, 413 `too_large` and 507 `quota_exceeded` to their refusals; 404 with any other body to `NotSupported`; 401, 429 and 503 to `Unauthorized`, `Busy` and `Unavailable` without reading their bodies"
+
+[[requirements]]
+id = "CLIENT-PROTO-BATCH-021"
+title = "v2 NAR replies outside the table are unexpected"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a v2 NAR reply has a status and body pair outside its table, including 422 and 200 `open`, an unknown key, or a body over 64 KiB"
+system = "v2 NAR reply classifier"
+action = "return `ReplyError::Unexpected` with the status, or `ReplyError::TooLarge` for the oversized body"

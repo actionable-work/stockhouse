@@ -285,3 +285,25 @@ type = "event"
 trigger = "`proxy.configureNix` is true"
 system = "NixOS module"
 action = "set `nix.settings.fallback = true` at default priority, so a build whose substitution fails with a proxy 503 or 502 is built locally instead of failing"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-027"
+title = "The server protocol is shared by uploader and lease client"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the uploader uses the `server` backend, with or without `uploader.protocol`"
+system = "NixOS module"
+action = "write `protocol` with the option value, default `auto`, into both the generated server backend and the lease configuration, and refuse values other than `auto`, `v1` and `v2`"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-MODULE-028"
+title = "Concurrent NAR transfers are configurable within bounds"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the uploader uses the `server` backend, with or without `uploader.maxInflightNars`"
+system = "NixOS module"
+action = "write `max_inflight_nars` with the option value, default 4, into the generated server backend and fail an assertion for a value outside 1 to 16"
