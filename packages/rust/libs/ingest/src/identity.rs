@@ -1,7 +1,7 @@
 //! Per-path upload identities and wire state under `uploads/`.
 
 use crate::fsutil;
-use crate::queue::{Queue, QueueError, done_bytes, io_err};
+use crate::queue::{Queue, QueueError, io_err};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
@@ -77,20 +77,12 @@ impl Queue {
         Ok(entry)
     }
 
-    fn pending_id(&self, path: &StorePath) -> Result<Option<UploadId>, QueueError> {
-        let record = self.read_record(&self.path("pending", path.hash().as_str(), ".json"))?;
-        Ok(record.and_then(Result::ok).map(|r| r.id))
-    }
-
-    /// The wire state for `path`. `root_id` is the record identity when
-    /// `path` is the queued path itself; dependencies pass `None`.
-    pub fn upload_state(
-        &self,
-        path: &StorePath,
-        root_id: Option<UploadId>,
-    ) -> Result<UploadEntry, QueueError> {
+    /// Reads the current path identity. A valid pending record is authoritative.
+    pub fn upload_state(&self, path: &StorePath) -> Result<UploadEntry, QueueError> {
+        let pending = self.read_pending(path)?.and_then(Result::ok);
+        let pending_id = pending.map(|record| record.id);
         match self.read_entry(path)? {
-            Read::Valid(entry) if root_id.is_none_or(|id| id == entry.id) => return Ok(entry),
+            Read::Valid(entry) if pending_id.is_none_or(|id| id == entry.id) => return Ok(entry),
             Read::Corrupt => {
                 let target = self.path("failed", path.hash().as_str(), ".upload.corrupt");
                 fsutil::rename(&self.entry_path(path), &target)
@@ -98,7 +90,7 @@ impl Queue {
             }
             _ => {}
         }
-        if let Some(id) = root_id {
+        if let Some(id) = pending_id {
             return self.write_entry(
                 path,
                 UploadEntry {
@@ -107,11 +99,14 @@ impl Queue {
                 },
             );
         }
-        let id = self.pending_id(path)?.unwrap_or_else(UploadId::generate);
+        self.create_entry(path)
+    }
+
+    fn create_entry(&self, path: &StorePath) -> Result<UploadEntry, QueueError> {
         let bytes = Self::entry_bytes(
             path,
             UploadEntry {
-                id,
+                id: UploadId::generate(),
                 nar_sent: false,
             },
         );
@@ -119,11 +114,27 @@ impl Queue {
             .map_err(io_err("create upload entry"))?;
         match self.read_entry(path)? {
             Read::Valid(entry) => Ok(entry),
-            _ => Err(QueueError::Io {
-                op: "read upload entry",
-                error: io::Error::from(io::ErrorKind::InvalidData),
-            }),
+            _ => Err(io_err("read upload entry")(io::Error::from(
+                io::ErrorKind::InvalidData,
+            ))),
         }
+    }
+
+    /// Replaces a forgotten identity, making any pending record durable first.
+    pub fn renew_identity(&self, path: &StorePath) -> Result<UploadEntry, QueueError> {
+        let id = UploadId::generate();
+        if let Some(Ok(mut record)) = self.read_pending(path)? {
+            record.id = id;
+            fsutil::replace(&self.tmp(), &self.pending_path(path), &record.to_json())
+                .map_err(io_err("renew pending identity"))?;
+        }
+        self.write_entry(
+            path,
+            UploadEntry {
+                id,
+                nar_sent: false,
+            },
+        )
     }
 
     /// Durably records that a NAR may be sent for this entry.
@@ -156,16 +167,14 @@ impl Queue {
         )
     }
 
-    /// Records a dependency as uploaded: ledger first, then the entry goes.
+    /// Records a path as uploaded before removing its upload entry.
     pub fn complete_path(
         &self,
         path: &StorePath,
         id: UploadId,
         now: u64,
     ) -> Result<(), QueueError> {
-        let target = self.path("done", path.hash().as_str(), ".json");
-        fsutil::create_new(&self.tmp(), &target, &done_bytes(&id, path, now))
-            .map_err(io_err("write done"))?;
+        self.write_done(path, id, now)?;
         self.remove_entry(path)
     }
 

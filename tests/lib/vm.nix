@@ -40,14 +40,17 @@
     http.server.HTTPServer(("127.0.0.1", 8485), Handler).serve_forever()
   '';
 
-  # The server-backend variant: the private tier is the local fake protocol
-  # v1 server, which the uploader and lease client talk to.
-  serverNode = {
+  # The server backend talks to a loopback fake in the VM.
+  serverNode = fakeProtocol: {
     systemd.services.stockhouse-vm-fake = {
       wantedBy = ["multi-user.target"];
       before = ["stockhouse-proxy.service" "stockhouse-uploader.service"];
       after = ["stockhouse-vm-token.service"];
       requires = ["stockhouse-vm-token.service"];
+      preStart = lib.optionalString (fakeProtocol == "v1") ''
+        mkdir -p /var/lib/stockhouse-fake/control
+        touch /var/lib/stockhouse-fake/control/v1-only
+      '';
       serviceConfig = {
         ExecStart = "${pkgs.python3}/bin/python3 ${./upload_server.py} /var/lib/stockhouse-vm/private-token";
         StateDirectory = "stockhouse-fake";
@@ -218,6 +221,12 @@
             machine.succeed(f"rm -f {UPLOAD_STATE}/control/{name}")
 
 
+    def assert_v1_fallback():
+        lines = fake_log()
+        assert "GET protocol - 404" in lines, lines
+        assert not any(line.split()[1].startswith("v2/") for line in lines), lines
+
+
     def pending_record(path):
         return json.loads(machine.succeed(f"cat {QUEUE}/pending/{store_hash(path)}.json"))
 
@@ -261,6 +270,7 @@ in {
     passthru,
     signIn ? false,
     backend ? "nix-copy",
+    fakeProtocol ? "v2",
   }:
     lib.mapAttrs' (version: nixPackage:
       lib.nameValuePair "vm-${story}-${version}" (pkgs.testers.runNixOSTest {
@@ -274,7 +284,7 @@ in {
                 else {}
               ))
             ]
-            ++ lib.optional (backend == "server") serverNode;
+            ++ lib.optional (backend == "server") (serverNode fakeProtocol);
         };
         testScript = prelude + script;
         inherit passthru;

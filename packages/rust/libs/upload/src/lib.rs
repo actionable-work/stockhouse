@@ -1,18 +1,25 @@
-//! Authenticated server upload and lease renewal for the Stockhouse client.
+//! Authenticated server upload for the Stockhouse client.
 //!
-//! Implements protocol v1 from `stockhouse-proto`: the `server` backend
-//! behind `stockhouse_ingest::Uploader`, which uploads each queued path's
-//! closure references first, and the lease client that renews this
-//! machine's system roots. Credentials come only from an injected
-//! `CredentialSource` and are sent only under the configured base URL.
+//! Implements the protocol v1 `server` backend behind
+//! `stockhouse_ingest::Uploader`, which uploads each queued path's
+//! closure references first. Credentials come from a `CredentialSource`
+//! and are sent only under the configured base URL.
 
 mod backend;
 mod closure;
 mod endpoint;
-pub mod lease;
 mod nar;
+mod negotiate;
+mod resend;
+mod transport;
 
 pub use backend::{PATH_BUDGET, ServerUploader};
 pub use closure::{ClosureEntry, ClosureError, parse_closure, query, upload_order};
-pub use endpoint::{EndpointError, ServerEndpoint, check_base_url, nar_timeout};
+pub use endpoint::{
+    EndpointError, Exchange, InvalidCredential, ServerEndpoint, check_base_url, nar_timeout,
+};
 pub use nar::{CHUNK, Dump, DumpFailure, NarReader};
+
+pub use negotiate::{NegotiationFailure, Negotiator, PROBE_TTL_SECS};
+pub use resend::{BatchFailure, BatchRequest};
+pub use transport::RequestFailure;

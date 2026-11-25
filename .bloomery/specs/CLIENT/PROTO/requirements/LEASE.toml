@@ -98,3 +98,14 @@ type = "event"
 trigger = "a result of a lease batch is classified"
 system = "batch reply classifier"
 action = "map state `renewed` to `Renewed`, errors `unknown_path` and `conflict` to `Refused` with that reason and `machines_full` to `MachinesFull`, and any other state or error, or a result whose `machine` and `slot` differ from its entry, to `ReplyError::Unexpected` with status 200"
+
+[[requirements]]
+id = "CLIENT-PROTO-LEASE-010"
+title = "Lease renewal applies the requested current binding"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a v2 lease renewal for a machine slot succeeds, including a repeat or a return to a previously bound path"
+system = "protocol v2 server"
+action = "set and renew the slot's binding to the requested store path before responding, keeping a single lease for that machine and slot"

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use stockhouse_credentials::CredentialSpec;
+use stockhouse_lease::{LeaseConfig, LeaseConfigError};
 use stockhouse_upload::EndpointError;
-use stockhouse_upload::lease::{LeaseConfig, LeaseConfigError};
 use stockhouse_wire::LeaseSlot;
 
 const VALID: &str = r#"version = 1
@@ -116,4 +116,31 @@ fn lease_configuration_rejects_bad_input() {
         parse(&VALID.replace("https://cache", "http://cache")),
         Err(LeaseConfigError::Endpoint(EndpointError::Cleartext))
     );
+}
+
+#[cfg_attr(any(), bloomery("CLIENT-INGEST-CONFIG-007"))]
+#[test]
+fn lease_protocol_defaults_to_auto_and_accepts_only_known_modes() {
+    use stockhouse_wire_v2::ProtocolMode;
+
+    assert_eq!(
+        LeaseConfig::parse(VALID).unwrap().protocol,
+        ProtocolMode::Auto
+    );
+    for (input, mode) in [
+        ("auto", ProtocolMode::Auto),
+        ("v1", ProtocolMode::V1),
+        ("v2", ProtocolMode::V2),
+    ] {
+        assert_eq!(
+            LeaseConfig::parse(&with(&format!("protocol = \"{input}\"")))
+                .unwrap()
+                .protocol,
+            mode
+        );
+    }
+    assert!(matches!(
+        LeaseConfig::parse(&with("protocol = \"v3\"")),
+        Err(LeaseConfigError::Parse(_))
+    ));
 }

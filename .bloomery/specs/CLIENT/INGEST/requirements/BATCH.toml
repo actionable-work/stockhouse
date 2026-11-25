@@ -64,7 +64,7 @@ design = "design/ingest.md"
 type = "event"
 trigger = "a v2 request is answered `NotSupported`"
 system = "server backend (protocol v2)"
-action = "drop the selected version, send no further v2 batch request in the group, let running transfers finish with their `nar_sent` marks kept, return `Retry(Transient)` naming `protocol v2 not available` for every job not yet complete, and probe again before the next `upload_batch` call"
+action = "drop the selected version, start no further v2 request in the call, retain running transfer results and incomplete paths' `nar_sent` marks, apply job-outcome precedence to the active group, return `Retry(Transient)` naming `protocol v2 not available` for later unstarted jobs, and probe again before the next `upload_batch` call"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-007"
@@ -97,7 +97,7 @@ design = "design/ingest.md"
 type = "event"
 trigger = "a group path has an upload entry with `nar_sent = true`"
 system = "server backend (protocol v2)"
-action = "query it with `POST v2/status` before any declare or NAR request for it, treat `present` and `published` as complete, `verified` as ready to publish without a NAR, `open` as send the NAR, `unknown_upload` as `clear_nar_sent` then declare, and `verification_failed` as rejected"
+action = "query it with `POST v2/status` before any declare or NAR request for it, treat `present` and `published` as server-confirmed, `verified` as ready to publish without a NAR, `open` as send the NAR, `unknown_upload` as `clear_nar_sent` then declare, and `verification_failed` as rejected"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-010"
@@ -108,7 +108,7 @@ design = "design/ingest.md"
 type = "event"
 trigger = "group paths need declaring"
 system = "server backend (protocol v2)"
-action = "send them with `POST v2/declare` in upload order, each batch filled until `DeclareBatch::push` returns `BatchFull`, with entries carrying the path-info facts and identities exactly as v1 declarations"
+action = "send them with `POST v2/declare` in upload order, each batch filled until `DeclareBatch::push` returns `DeclarePushError::BatchFull`, with entries carrying the path-info facts and identities exactly as v1 declarations"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-011"
@@ -119,7 +119,7 @@ design = "design/ingest.md"
 type = "event"
 trigger = "a declare batch is answered with results"
 system = "server backend (protocol v2)"
-action = "treat `present` and `published` as complete, `verified` as ready to publish, `open` as `mark_nar_sent` durable before the NAR is sent, and `conflict`, `too_large` and `verification_failed` as rejected with the code"
+action = "treat `present` and `published` as server-confirmed, `verified` as durably set `nar_sent` if clear and ready to publish without a transfer, `open` as `mark_nar_sent` durable before the NAR is sent, and `conflict`, `too_large` and `verification_failed` as rejected with the code"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-012"
@@ -130,7 +130,7 @@ design = "design/ingest.md"
 type = "event"
 trigger = "group paths have NARs to send"
 system = "server backend (protocol v2)"
-action = "start their `PUT v2/nar/<id>` transfers in upload order with at most `max_inflight_nars` running at once, each reading the credential just before its request and streaming with the v1 verifier, length, timeout and child reaping, and continue the other transfers when one fails"
+action = "dispatch their `PUT v2/nar/<id>` transfer work in upload order with at most `max_inflight_nars` running at once, each reading the credential just before its request and streaming with the v1 verifier, length, timeout and child reaping, and continue the other transfers when one fails"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-013"
@@ -141,7 +141,7 @@ design = "design/ingest.md"
 type = "event"
 trigger = "a v2 NAR transfer is answered"
 system = "server backend (protocol v2)"
-action = "treat `verified` as ready to publish, `present` and `published` as complete, `verification_failed`, `conflict`, `too_large` and `bad_request` as rejected, an outage before the body was fully sent as transient and a lost reply after it as uncertain with `nar_sent` kept"
+action = "treat `verified` as ready to publish, `present` and `published` as server-confirmed, `verification_failed`, `conflict`, `too_large` and `bad_request` as rejected, an outage before the body was fully sent as transient and a lost reply after it as uncertain with `nar_sent` kept"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-014"
@@ -163,18 +163,18 @@ design = "design/ingest.md"
 type = "event"
 trigger = "a publish batch is answered with results"
 system = "server backend (protocol v2)"
-action = "treat `published` and `present` as complete, `missing_references` naming paths outside the request as the missing-reference round, and `conflict` and `verification_failed` as rejected"
+action = "treat `published` and `present` as server-confirmed, `missing_references` according to the ordered validation and classification in BATCH-034, BATCH-027 and BATCH-019, and `conflict` and `verification_failed` as rejected"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-016"
-title = "A lost publish never resends NARs"
+title = "A lost publish is reconciled before any new transfer"
 manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
 trigger = "a publish batch gets no reply after its request was sent, even after its resends"
 system = "server backend (protocol v2)"
-action = "end its paths as uncertain with `nar_sent` kept and send no NAR for them, so the next job finds them `verified` through `v2/status` and publishes them"
+action = "end its paths as uncertain with `nar_sent` kept, query `v2/status` for them before any new transfer on the next job, apply the completion rule to `published` or `present` paths and publish `verified` paths without another NAR, and follow the normal status rules for other results"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-017"
@@ -205,9 +205,9 @@ manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
-trigger = "a publish result is `missing_references` and a name is neither a group path not complete at that point nor an entry of the same request that ended `published` or `present`"
+trigger = "a publish result is `missing_references`, all names pass BATCH-034 validation, and a name is outside the group work set or was completed by an earlier request of the group"
 system = "server backend (protocol v2)"
-action = "remove `done/` for each such name, add those names to the next round, reconciling them with `v2/status` only when their `nar_sent` is true and declaring them otherwise, and rework the path, at most once per path per group"
+action = "invalidate the ledger for each such name under BATCH-037, add those names to the next round, reconciling them with `v2/status` only when their `nar_sent` is true and declaring them otherwise, and rework the path, at most once per path per group"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-034"
@@ -218,16 +218,16 @@ design = "design/ingest.md"
 type = "event"
 trigger = "a publish result is `missing_references` with a name that is not one of the entry's declared references other than itself, or that is an entry of the same publish request whose result was `published` or `present`"
 system = "server backend (protocol v2)"
-action = "end the entry's path as `Retry(Transient, \"protocol violation\")` whichever classification its other names have, without holding it back or running a missing-reference round for it"
+action = "end the entry's path as `Retry(Transient, \"protocol violation\")` whichever classification its other names have, before holding it back, removing any named ledger entry or scheduling rework for it"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-027"
-title = "Same-request missing references hold the referrer back"
+title = "Incomplete group references hold the referrer back"
 manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
-trigger = "a publish result is `missing_references` naming a group path not complete at that point, including an entry of the same publish request that did not end `published` or `present`"
+trigger = "a valid `missing_references` publish result names a group path not complete at that point, including an entry of the same publish request that did not end `published` or `present`"
 system = "server backend (protocol v2)"
 action = "hold the referrer back with `nar_sent` kept, leave the `done/` entries of it and the named paths unchanged, not rework it for that name, and run the missing-reference round only for names outside this rule"
 
@@ -240,7 +240,7 @@ design = "design/ingest.md"
 type = "event"
 trigger = "a round ends with held-back paths"
 system = "server backend (protocol v2)"
-action = "carry a held-back path into the next round, in upload order, when any of its references that is not complete is reworked or carried, sending it only to the publish phase with no status, declare or NAR request; and end every held-back path that is not carried, or is still held back after the last round, as `Retry(Transient, \"<path>: waiting for a reference\")` with `nar_sent` kept, so the next job finds it `verified` through `v2/status` and sends no NAR for it"
+action = "carry a held-back path into the next round, in upload order, when any of its references that is not complete is reworked or carried, sending it only to the publish phase with no status, declare or NAR request; and end every held-back path that is not carried, or is still held back after the last round, as `Retry(Transient, \"<path>: waiting for a reference\")` with `nar_sent` kept, so the next job reconciles it through `v2/status` before any new transfer and reuses a NAR the server still holds"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-020"
@@ -255,14 +255,14 @@ action = "end that path as `Retry(Transient)` naming `upload round limit`"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-021"
-title = "Quota exhaustion stops new work but keeps verified uploads"
+title = "A quota refusal leaves independent paths eligible"
 manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
-trigger = "any group request reports `quota_exceeded`"
+trigger = "one path of a group receives `quota_exceeded` while other paths can still be uploaded"
 system = "server backend (protocol v2)"
-action = "send no further declare request and start no further NAR transfer in the group, still publish the publishable paths, end the paths not yet attempted and the paths reworked for `unknown_upload`, a publish `open` or a missing-reference round that would need a declare or NAR as quota, and carry none of their held-back referrers"
+action = "continue declares, transfers, publishes and otherwise eligible rework for unaffected paths, and hold back verified referrers of the refused path with their `nar_sent` marks kept"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-022"
@@ -273,7 +273,7 @@ design = "design/ingest.md"
 type = "event"
 trigger = "a credential read fails during a group"
 system = "server backend (protocol v2)"
-action = "send no further request, reap any running dump, and return `Deferred(\"credential unavailable: <error>\")` for every job not yet complete with its `nar_sent` marks kept"
+action = "send no further request, finish or abort running transfers and reap their dumps, record definitive results, and return `Deferred(\"credential unavailable: <error>\")` for each incomplete job whose closure has no rejected path, keeping existing `nar_sent` marks for incomplete paths"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-023"
@@ -295,7 +295,7 @@ design = "design/ingest.md"
 type = "event"
 trigger = "a group ends"
 system = "server backend (protocol v2)"
-action = "return `Uploaded` for each job whose closure paths are all complete or ledgered, and otherwise the first of `Rejected` naming its first rejected path in upload order, `Deferred`, `Retry(QuotaExceeded)`, `Retry(Uncertain)` and `Retry(Transient)` among its closure paths"
+action = "return `Uploaded` for each job whose closure paths are all complete or ledgered, otherwise return `Rejected` naming its first definitively rejected path in upload order even during a credential stop, otherwise return `Deferred` on a credential stop, otherwise return `Retry(Transient)` naming `protocol v2 not available` on a version stop, otherwise return the first of `Retry(QuotaExceeded)`, `Retry(Uncertain)` and `Retry(Transient)` among its closure paths"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-025"
@@ -310,14 +310,14 @@ action = "place each path in at most two status entries (the first round and a m
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-026"
-title = "Completed paths are recorded as in v1"
+title = "The ledger records paths with complete closures"
 manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
-trigger = "a group path becomes complete"
+trigger = "a v2 group receives a server confirmation or completes a reference of a server-confirmed path"
 system = "server backend (protocol v2)"
-action = "call `Queue::complete_path` for a dependency and remove the `uploads/` entry of a root, leaving the root ledger entry to the worker"
+action = "process new completions in upload order and call `Queue::complete_path` for each dependency or root only when it is server-confirmed and every non-self reference is complete or ledgered, keeping the upload entry until then"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-029"
@@ -350,7 +350,7 @@ design = "design/ingest.md"
 type = "event"
 trigger = "a declare, NAR or publish result for a group path is `quota_exceeded`"
 system = "server backend (protocol v2)"
-action = "end that path as `Retry(QuotaExceeded)` naming the request and start the quota stop"
+action = "end that path for the group as `Retry(QuotaExceeded)` naming the request, without reworking it"
 
 [[requirements]]
 id = "CLIENT-INGEST-BATCH-032"
@@ -383,4 +383,26 @@ design = "design/ingest.md"
 type = "event"
 trigger = "a v2 declare result is `unknown_upload`"
 system = "server backend (protocol v2)"
-action = "call `Queue::renew_identity` for that path, send no NAR under the old identity, and rework it to be declared in the next round with the new identity, at most once per path per group, ending it as `Retry(Transient)` on a second occurrence and as quota under the quota stop"
+action = "call `Queue::renew_identity` for that path, send no NAR under the old identity, and rework it to be declared in the next round with the new identity, at most once per path per group, ending it as `Retry(Transient)` on a second occurrence"
+
+[[requirements]]
+id = "CLIENT-INGEST-BATCH-036"
+title = "Later groups use current upload state"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a group starts after earlier groups in the same call have run"
+system = "server backend (protocol v2)"
+action = "recheck each path's ledger state after applying outstanding invalidations to newly known referrers, and read current wire state for the remaining paths using the pending record identity even when an earlier group renewed it after the jobs were collected"
+
+[[requirements]]
+id = "CLIENT-INGEST-BATCH-037"
+title = "Missing references revoke known closure completions"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a valid missing-reference result enters the missing-reference round for a path"
+system = "server backend (protocol v2)"
+action = "remove the missing path and its known transitive referrers from the ledger in referrers-first order, demote affected in-memory completions, apply unrepaired invalidations before reading the ledger in later groups, and turn an earlier Uploaded outcome whose root remains invalidated into a transient retry"

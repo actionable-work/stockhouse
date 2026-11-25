@@ -4,22 +4,8 @@ use crate::record::Record;
 use crate::rescan::{RescanError, rescan};
 use crate::scanner::Scanner;
 use crate::uploader::{RetryKind, UploadJob, UploadOutcome, Uploader, backoff};
-use std::io::Write;
-
-/// Retry and batching limits.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct WorkerLimits {
-    /// Records attempted per pass.
-    pub batch_size: usize,
-    /// Retry outcomes before a record fails.
-    pub max_attempts: u32,
-    /// First backoff, seconds.
-    pub backoff_base_secs: u64,
-    /// Backoff cap, seconds.
-    pub backoff_max_secs: u64,
-    /// Seconds between periodic rescans.
-    pub rescan_interval_secs: u64,
-}
+use std::io::{self, Write};
+use stockhouse_uploader_config::WorkerLimits;
 
 /// What one pass did.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -69,16 +55,28 @@ impl<'a> Worker<'a> {
         let mut report = PassReport::default();
         (report.reconciled, report.quarantined) = self.reconcile()?;
         report.rescanned = self.maybe_rescan(now, log)?;
-        for record in self.due(now)? {
-            report.attempted += 1;
-            let job = UploadJob {
+        let records = self.due(now)?;
+        if records.is_empty() {
+            return Ok(report);
+        }
+        let jobs: Vec<_> = records
+            .iter()
+            .map(|record| UploadJob {
                 id: record.id,
                 store_path: record.store_path.clone(),
                 attempts: record.attempts,
-            };
-            if self.apply(record, self.uploader.upload(&job), now)? {
-                report.uploaded += 1;
-            }
+            })
+            .collect();
+        let outcomes = self.uploader.upload_batch(&jobs);
+        if outcomes.len() != jobs.len() {
+            return Err(io_err("upload batch")(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "uploader returned a different number of outcomes than jobs",
+            )));
+        }
+        report.attempted = jobs.len();
+        for (record, outcome) in records.into_iter().zip(outcomes) {
+            report.uploaded += usize::from(self.apply(record, outcome, now)?);
         }
         Ok(report)
     }
@@ -93,7 +91,7 @@ impl<'a> Worker<'a> {
             if self.queue.is_uploaded_hash(&stem) {
                 fsutil::remove(&path).map_err(io_err("remove reconciled"))?;
                 reconciled += 1;
-            } else if let Some(Err(())) = self.queue.read_record(&path)? {
+            } else if let Some(Err(())) = self.queue.read_pending_hash(&stem)? {
                 fsutil::rename(&path, &self.queue.path("failed", &stem, ".corrupt"))
                     .map_err(io_err("quarantine"))?;
                 quarantined += 1;
@@ -138,9 +136,7 @@ impl<'a> Worker<'a> {
         for stem in fsutil::stems(&self.queue.root().join("pending"), ".json")
             .map_err(io_err("list pending"))?
         {
-            if let Some(Ok(record)) = self
-                .queue
-                .read_record(&self.queue.path("pending", &stem, ".json"))?
+            if let Some(Ok(record)) = self.queue.read_pending_hash(&stem)?
                 && record.next_attempt_at <= now
             {
                 due.push(record);
@@ -154,10 +150,24 @@ impl<'a> Worker<'a> {
     /// Applies an outcome; `Ok(true)` when the upload completed.
     pub fn apply(
         &self,
-        mut record: Record,
+        record: Record,
         outcome: UploadOutcome,
         now: u64,
     ) -> Result<bool, QueueError> {
+        let path = &record.store_path;
+        if self.queue.is_uploaded(path) {
+            fsutil::remove(&self.queue.pending_path(path)).map_err(io_err("remove pending"))?;
+            return Ok(true);
+        }
+        let mut record = match self.queue.read_pending(path)? {
+            Some(Ok(record)) => record,
+            None => return Ok(false),
+            Some(Err(())) => {
+                return Err(io_err("read pending")(io::Error::from(
+                    io::ErrorKind::InvalidData,
+                )));
+            }
+        };
         let (base, max) = (self.limits.backoff_base_secs, self.limits.backoff_max_secs);
         match outcome {
             UploadOutcome::Uploaded => return self.complete(&record, now).map(|()| true),
@@ -187,14 +197,10 @@ impl<'a> Worker<'a> {
         self.rewrite(&record).map(|()| false)
     }
 
-    fn pending_path(&self, record: &Record) -> std::path::PathBuf {
-        self.queue
-            .path("pending", record.store_path.hash().as_str(), ".json")
-    }
-
     fn complete(&self, record: &Record, now: u64) -> Result<(), QueueError> {
-        self.queue.write_done(record, now)?;
-        fsutil::remove(&self.pending_path(record)).map_err(io_err("remove pending"))
+        self.queue.write_done(&record.store_path, record.id, now)?;
+        fsutil::remove(&self.queue.pending_path(&record.store_path))
+            .map_err(io_err("remove pending"))
     }
 
     fn fail(&self, record: &Record) -> Result<(), QueueError> {
@@ -203,13 +209,14 @@ impl<'a> Worker<'a> {
             .path("failed", record.store_path.hash().as_str(), ".json");
         fsutil::replace(&self.queue.tmp(), &target, &record.to_json())
             .map_err(io_err("write failed"))?;
-        fsutil::remove(&self.pending_path(record)).map_err(io_err("remove pending"))
+        fsutil::remove(&self.queue.pending_path(&record.store_path))
+            .map_err(io_err("remove pending"))
     }
 
     fn rewrite(&self, record: &Record) -> Result<(), QueueError> {
         fsutil::replace(
             &self.queue.tmp(),
-            &self.pending_path(record),
+            &self.queue.pending_path(&record.store_path),
             &record.to_json(),
         )
         .map_err(io_err("rewrite pending"))

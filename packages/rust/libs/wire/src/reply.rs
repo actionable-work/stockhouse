@@ -151,11 +151,11 @@ fn state(kind: RequestKind, name: &str) -> Option<UploadState> {
 }
 
 fn refusal(kind: RequestKind, status: u16, code: &str) -> Option<UploadRefusal> {
-    use RequestKind::{Declare, Status};
+    use RequestKind::Status;
     let found = match (status, code) {
         (400, "verification_failed") => UploadRefusal::VerificationFailed,
         (400, "bad_request") if kind != Status => UploadRefusal::BadRequest,
-        (404, "unknown_upload") if kind != Declare => UploadRefusal::UnknownUpload,
+        (404, "unknown_upload") => UploadRefusal::UnknownUpload,
         (409, "conflict") if kind != Status => UploadRefusal::Conflict,
         (413, "too_large") if kind != Status => UploadRefusal::TooLarge,
         (507, "quota_exceeded") if kind != Status => UploadRefusal::QuotaExceeded,

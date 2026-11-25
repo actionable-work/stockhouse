@@ -4,7 +4,7 @@ use stockhouse_proto::{StorePath, UploadId, check_version};
 /// A pending or failed queue record.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Record {
-    /// Upload identity, fixed for the record's life.
+    /// Upload identity, stable until a server reports that it was forgotten.
     pub id: UploadId,
     /// The store path to upload.
     pub store_path: StorePath,

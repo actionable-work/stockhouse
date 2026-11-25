@@ -361,7 +361,7 @@ design = "design/integration.md"
 type = "event"
 trigger = "the fake server commits every publish batch and closes the connection without replying until `drop-publish` is removed"
 system = "installed client"
-action = "end the job uncertain after the bounded resends, and after the control is removed publish the closure through a later job that queries `v2/status`, with every NAR of the closure sent exactly once"
+action = "end the job uncertain after the bounded resends, and after the control is removed complete a later job through `v2/status` reporting the uploads as published, with each NAR sent exactly once and no further publish request"
 
 [[requirements]]
 id = "CLIENT-INTEGRATION-VM-034"

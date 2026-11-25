@@ -9,7 +9,7 @@ use stockhouse_upload::ServerUploader;
 fn marked(store: &Store, root: &StorePath) -> (Queue, stockhouse_ingest::UploadJob) {
     let queue = store.queue();
     let job = job(&queue, root);
-    let entry = queue.upload_state(root, Some(job.id)).unwrap();
+    let entry = queue.upload_state(root).unwrap();
     queue.mark_nar_sent(root, entry).unwrap();
     (queue, job)
 }
@@ -61,7 +61,7 @@ fn uncertain_uploads_are_reconciled_before_resending() {
         let mut store = Store::new();
         let root = store.add("root", &[]);
         let (_queue, job) = marked(&store, &root);
-        let server = FakeServer::protocol(Arc::default(), move |req| {
+        let server = Protocol::start(Arc::default(), move |req| {
             if req.method == "GET" {
                 get.clone()
             } else {
@@ -80,7 +80,7 @@ fn uncertain_uploads_are_reconciled_before_resending() {
     let (_queue, job) = marked(&store, &root);
     let seeded = Arc::new(Mutex::new(false));
     let s2 = seeded.clone();
-    let server = FakeServer::protocol(proto, move |req| {
+    let server = Protocol::start(proto, move |req| {
         let first_get = req.method == "GET" && !std::mem::replace(&mut *s2.lock().unwrap(), true);
         first_get.then(|| state("open"))
     });
@@ -99,7 +99,7 @@ fn an_unknown_upload_is_declared_again() {
     let queue = store.queue();
     let first = Arc::new(Mutex::new(true));
     let f2 = first.clone();
-    let server = FakeServer::protocol(Arc::default(), move |req| {
+    let server = Protocol::start(Arc::default(), move |req| {
         if req.method == "PUT" && std::mem::replace(&mut *f2.lock().unwrap(), false) {
             return Some(error(404, "unknown_upload"));
         }
@@ -112,7 +112,7 @@ fn an_unknown_upload_is_declared_again() {
     assert_eq!(methods(&server), ["POST", "PUT", "POST", "PUT"]);
     let other = store.add("other", &[]);
     let (_q, job) = marked(&store, &other);
-    let server = FakeServer::protocol(Arc::default(), |_| None);
+    let server = Protocol::start(Arc::default(), |_| None);
     assert_eq!(
         uploader(&store, &server).upload(&job),
         UploadOutcome::Uploaded
@@ -131,7 +131,7 @@ fn upload_identities_are_stable() {
     let proto = Arc::new(Protocol::default());
     let fail_put = Arc::new(Mutex::new(true));
     let (f2, r2) = (fail_put.clone(), root.clone());
-    let server = FakeServer::protocol(proto, move |req| {
+    let server = Protocol::start(proto, move |req| {
         (req.method == "POST"
             && declared(req).as_deref() == Some(r2.as_str())
             && *f2.lock().unwrap())

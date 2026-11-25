@@ -21,7 +21,7 @@ fn the_bearer_goes_only_under_the_base_url() {
     let mut store = Store::new();
     let a = store.add("a", &[]);
     let root = store.add("root", &[&a]);
-    let server = FakeServer::protocol(Arc::default(), |_| None);
+    let server = Protocol::start(Arc::default(), |_| None);
     let queue = store.queue();
     assert_eq!(
         uploader(&store, &server).upload(&job(&queue, &root)),
@@ -103,7 +103,7 @@ fn credentials_never_appear_in_outcomes() {
         UploadOutcome::Rejected(format!("{root}: POST declare: conflict"))
     );
     let root = store.add("redirected", &[]);
-    let server = FakeServer::protocol(Arc::default(), move |req| {
+    let server = Protocol::start(Arc::default(), move |req| {
         (req.method == "PUT").then(|| Action::Reply(302, marker.to_owned()))
     });
     let outcome = uploader(&store, &server).upload(&job(&queue, &root));
@@ -123,7 +123,7 @@ fn credentials_never_appear_in_outcomes() {
 fn credential_errors_defer_without_a_request() {
     let mut store = Store::new();
     let root = store.add("root", &[]);
-    let server = FakeServer::protocol(Arc::default(), |_| None);
+    let server = Protocol::start(Arc::default(), |_| None);
     let queue = store.queue();
     for error in [
         CredentialError::NotConfigured,
@@ -174,7 +174,7 @@ fn credential_errors_defer_without_a_request() {
 fn credential_errors_later_in_a_job_also_defer() {
     let mut store = Store::new();
     let root = store.add("root", &[]);
-    let server = FakeServer::protocol(Arc::default(), |_| None);
+    let server = Protocol::start(Arc::default(), |_| None);
     let queue = store.queue();
     let (source, reads) = counting(Some(2), CredentialError::Unreadable);
     let outcome = uploader_with(&store, &server, source).upload(&job(&queue, &root));
@@ -216,7 +216,7 @@ fn a_401_retries_once_only_after_a_successful_invalidate() {
     let root = store.add("refreshed", &[]);
     let first = Arc::new(AtomicBool::new(true));
     let f2 = first.clone();
-    let server = FakeServer::protocol(Arc::default(), move |_| {
+    let server = Protocol::start(Arc::default(), move |_| {
         f2.swap(false, Ordering::SeqCst)
             .then(|| Action::Reply(401, String::new()))
     });
@@ -253,7 +253,7 @@ fn references_upload_before_referrers() {
     let b = store.add("b", &[&a]);
     let c = store.add("c", &[&a]);
     let root = store.add("root", &[&b, &c]);
-    let server = FakeServer::protocol(Arc::default(), |_| None);
+    let server = Protocol::start(Arc::default(), |_| None);
     let queue = store.queue();
     assert_eq!(
         uploader(&store, &server).upload(&job(&queue, &root)),
@@ -276,7 +276,7 @@ fn uploaded_dependencies_are_skipped() {
     let root = store.add("root", &[&a]);
     let proto = Arc::new(Protocol::default());
     proto.hold(a.basename());
-    let server = FakeServer::protocol(proto, |_| None);
+    let server = Protocol::start(proto, |_| None);
     let queue = store.queue();
     queue
         .complete_path(&a, stockhouse_proto::UploadId::generate(), 1)
@@ -294,7 +294,7 @@ fn declarations_carry_the_path_info_facts() {
     let mut store = Store::new();
     let a = store.add("a", &[]);
     let root = store.add("root", &[&root_self(), &a]);
-    let server = FakeServer::protocol(Arc::default(), |_| None);
+    let server = Protocol::start(Arc::default(), |_| None);
     let queue = store.queue();
     uploader(&store, &server).upload(&job(&queue, &root));
     let req = server
@@ -328,7 +328,7 @@ fn held_paths_complete_without_a_nar() {
     let proto = Arc::new(Protocol::default());
     proto.hold(a.basename());
     proto.hold(root.basename());
-    let server = FakeServer::protocol(proto, |_| None);
+    let server = Protocol::start(proto, |_| None);
     let queue = store.queue();
     assert_eq!(
         uploader(&store, &server).upload(&job(&queue, &root)),
@@ -348,7 +348,7 @@ fn an_open_upload_is_marked_before_its_nar_is_sent() {
     let file = entry_file(&queue, &root);
     let seen = Arc::new(Mutex::new(None));
     let record = seen.clone();
-    let server = FakeServer::protocol(Arc::default(), move |req| {
+    let server = Protocol::start(Arc::default(), move |req| {
         if req.method == "PUT" {
             *record.lock().unwrap() = std::fs::read_to_string(&file).ok();
         }
@@ -377,7 +377,7 @@ fn missing_references_are_reuploaded_through_the_worklist() {
     }
     let ledger_seen = Arc::new(Mutex::new(Vec::new()));
     let (q, seen, a2) = (queue.clone(), ledger_seen.clone(), a.clone());
-    let server = FakeServer::protocol(Arc::default(), move |req| {
+    let server = Protocol::start(Arc::default(), move |req| {
         if req.method == "POST" && declared(req).as_deref() == Some(a2.as_str()) {
             seen.lock().unwrap().push(q.is_uploaded(&a2));
         }
@@ -397,7 +397,7 @@ fn missing_references_are_reuploaded_through_the_worklist() {
 }
 
 fn always(status: u16, body: &'static str, method: &'static str) -> FakeServer {
-    FakeServer::protocol(Arc::default(), move |req| {
+    Protocol::start(Arc::default(), move |req| {
         (req.method == method).then(|| Action::Reply(status, body.to_owned()))
     })
 }
@@ -428,7 +428,7 @@ fn missing_reference_and_redeclare_transitions_are_bounded() {
         a.basename()
     );
     let r2 = root.clone();
-    let server = FakeServer::protocol(Arc::default(), move |req| {
+    let server = Protocol::start(Arc::default(), move |req| {
         (declared(req).as_deref() == Some(r2.as_str()))
             .then(|| Action::Reply(422, missing_a.clone()))
     });
@@ -445,7 +445,7 @@ fn missing_reference_and_redeclare_transitions_are_bounded() {
         "{{\"error\":\"missing_references\",\"missing\":[\"{}\"]}}",
         other.basename()
     );
-    let server = FakeServer::protocol(Arc::default(), move |req| {
+    let server = Protocol::start(Arc::default(), move |req| {
         (req.method == "POST").then(|| Action::Reply(422, bad.clone()))
     });
     let lonely = store.add("lonely", &[]);
@@ -489,7 +489,7 @@ fn permanent_refusals_reject_the_record() {
         ("PUT", 413, "too_large"),
     ] {
         let (store, root) = one_path();
-        let server = FakeServer::protocol(Arc::default(), move |req| {
+        let server = Protocol::start(Arc::default(), move |req| {
             (req.method == method).then(|| error(status, code))
         });
         let queue = store.queue();
@@ -552,7 +552,7 @@ fn a_job_uploads_only_when_its_whole_closure_did() {
     let b = store.add("b", &[&a]);
     let root = store.add("root", &[&b]);
     let b2 = b.clone();
-    let server = FakeServer::protocol(Arc::default(), move |req| {
+    let server = Protocol::start(Arc::default(), move |req| {
         (declared(req).as_deref() == Some(b2.as_str())).then(|| Action::Reply(503, String::new()))
     });
     let queue = store.queue();
@@ -574,7 +574,7 @@ fn the_credential_is_fresh_for_each_nar_upload() {
     let mut store = Store::new();
     let a = store.add("a", &[]);
     let root = store.add("root", &[&a]);
-    let server = FakeServer::protocol(Arc::default(), |_| None);
+    let server = Protocol::start(Arc::default(), |_| None);
     let queue = store.queue();
     let (source, reads) = counting(None, CredentialError::Missing);
     let outcome = uploader_with(&store, &server, source).upload(&job(&queue, &root));
@@ -598,4 +598,45 @@ fn each_path_has_a_request_budget() {
     );
     assert_eq!(server.lines().len(), 2);
     assert_eq!(stockhouse_upload::PATH_BUDGET, 8);
+}
+
+#[cfg_attr(any(), bloomery("CLIENT-INGEST-SERVER-036"))]
+#[test]
+fn a_forgotten_declaration_renews_once_before_sending_nar() {
+    for always_forgotten in [false, true] {
+        let (store, root) = one_path();
+        let queue = store.queue();
+        let job = job(&queue, &root);
+        let old = job.id.to_string();
+        let old_for_server = old.clone();
+        let server = FakeServer::start(move |request| {
+            request.body.as_ref()?;
+            Some(match request.method.as_str() {
+                "POST" if always_forgotten || request.path.contains(&old_for_server) => {
+                    error(404, "unknown_upload")
+                }
+                "POST" => common::server::state("open"),
+                "PUT" => common::server::state("published"),
+                _ => panic!("unexpected request"),
+            })
+        });
+        let outcome = uploader(&store, &server).upload(&job);
+        let requests = server.requests();
+        assert_eq!(requests[0].method, "POST");
+        assert!(requests[0].path.contains(&old));
+        assert_eq!(requests[1].method, "POST");
+        assert!(!requests[1].path.contains(&old));
+        if always_forgotten {
+            assert!(matches!(
+                outcome,
+                UploadOutcome::Retry(RetryKind::Transient, _)
+            ));
+            assert_eq!(requests.len(), 2);
+        } else {
+            assert_eq!(outcome, UploadOutcome::Uploaded);
+            assert_eq!(requests.len(), 3);
+            assert_eq!(requests[2].method, "PUT");
+            assert_eq!(requests[2].path, format!("{}/nar", requests[1].path));
+        }
+    }
 }

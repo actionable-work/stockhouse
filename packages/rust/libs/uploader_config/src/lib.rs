@@ -1,9 +1,26 @@
-use crate::worker::WorkerLimits;
+//! Configuration and worker limits for the Stockhouse uploader.
+
 use serde::Deserialize;
 use std::fmt;
 use std::path::PathBuf;
 use stockhouse_credentials::CredentialSpec;
 use stockhouse_proto::{UnsupportedVersion, check_version};
+use stockhouse_wire_v2::ProtocolMode;
+
+/// Retry and batching limits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WorkerLimits {
+    /// Records attempted per pass.
+    pub batch_size: usize,
+    /// Retry outcomes before a record fails.
+    pub max_attempts: u32,
+    /// First backoff, seconds.
+    pub backoff_base_secs: u64,
+    /// Backoff cap, seconds.
+    pub backoff_max_secs: u64,
+    /// Seconds between periodic rescans.
+    pub rescan_interval_secs: u64,
+}
 
 /// Why an uploader configuration was rejected.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -53,7 +70,7 @@ pub enum BackendConfig {
         #[serde(default = "default_nix")]
         nix: PathBuf,
     },
-    /// Authenticated upload to the private tier with protocol v1.
+    /// Authenticated upload to the private tier.
     Server(ServerBackendConfig),
 }
 
@@ -75,6 +92,36 @@ pub struct ServerBackendConfig {
     /// The largest closure uploaded.
     #[serde(default = "default_max_closure")]
     pub max_closure_paths: usize,
+    /// Upload protocol preference.
+    #[serde(default)]
+    pub protocol: ProtocolMode,
+    /// Maximum simultaneous v2 NAR transfers.
+    #[serde(default = "default_max_inflight")]
+    pub max_inflight_nars: i64,
+}
+
+fn default_max_inflight() -> i64 {
+    4
+}
+
+impl ServerBackendConfig {
+    fn check_limits(&self) -> Result<(), UploaderConfigError> {
+        let invalid = [
+            (
+                "request_timeout_secs",
+                !(1..=300).contains(&self.request_timeout_secs),
+            ),
+            ("max_closure_paths", self.max_closure_paths == 0),
+            (
+                "max_inflight_nars",
+                !(1..=16).contains(&self.max_inflight_nars),
+            ),
+        ];
+        match invalid.into_iter().find(|(_, invalid)| *invalid) {
+            Some((field, _)) => Err(UploaderConfigError::InvalidLimit(field)),
+            None => Ok(()),
+        }
+    }
 }
 
 fn default_timeout() -> u64 {
@@ -142,12 +189,7 @@ impl UploaderConfig {
         }
         config.check_limits()?;
         if let BackendConfig::Server(server) = &config.backend {
-            if !(1..=300).contains(&server.request_timeout_secs) {
-                return Err(UploaderConfigError::InvalidLimit("request_timeout_secs"));
-            }
-            if server.max_closure_paths == 0 {
-                return Err(UploaderConfigError::InvalidLimit("max_closure_paths"));
-            }
+            server.check_limits()?;
         }
         if let BackendConfig::NixCopy { destination, .. } = &config.backend {
             let absolute = destination

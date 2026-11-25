@@ -55,6 +55,10 @@ fn common_states(kind: RequestKind) {
 #[cfg_attr(any(), bloomery("CLIENT-PROTO-UPLOAD-008"))]
 #[test]
 fn declaration_replies_classify() {
+    assert_eq!(
+        reply(Declare, 404, &err("unknown_upload")),
+        refused(UploadRefusal::UnknownUpload)
+    );
     common_states(Declare);
     assert_eq!(
         reply(Declare, 200, r#"{"state":"open"}"#),
@@ -130,7 +134,6 @@ fn status_replies_classify() {
 #[cfg_attr(any(), bloomery("CLIENT-PROTO-UPLOAD-011"))]
 #[test]
 fn replies_outside_the_protocol_are_unexpected() {
-    assert_eq!(reply(Declare, 404, &err("unknown_upload")), unexpected(404));
     assert_eq!(reply(Status, 409, &err("conflict")), unexpected(409));
     assert_eq!(reply(Status, 422, &missing_body()), unexpected(422));
     assert_eq!(reply(Declare, 500, &err("conflict")), unexpected(500));

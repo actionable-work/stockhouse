@@ -1,10 +1,11 @@
-use crate::endpoint::{EndpointError, check_base_url};
 use serde::Deserialize;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use stockhouse_credentials::CredentialSpec;
 use stockhouse_proto::{UnsupportedVersion, check_version};
+use stockhouse_upload::{EndpointError, check_base_url};
 use stockhouse_wire::LeaseSlot;
+use stockhouse_wire_v2::ProtocolMode;
 
 /// Why a lease configuration was rejected.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -60,6 +61,8 @@ struct RawConfig {
     #[serde(default = "default_timeout")]
     request_timeout_secs: u64,
     #[serde(default)]
+    protocol: ProtocolMode,
+    #[serde(default)]
     extra: Vec<RawExtra>,
 }
 
@@ -97,6 +100,8 @@ pub struct LeaseConfig {
     pub system_profile: PathBuf,
     /// Per-request timeout, seconds.
     pub request_timeout_secs: u64,
+    /// Lease protocol preference.
+    pub protocol: ProtocolMode,
     /// Slots 3–10.
     pub extra: Vec<(LeaseSlot, PathBuf)>,
     /// Resolved paths are read relative to this root (`/` unless a test
@@ -155,6 +160,7 @@ impl LeaseConfig {
             current_system: raw.current_system,
             system_profile: raw.system_profile,
             request_timeout_secs: raw.request_timeout_secs,
+            protocol: raw.protocol,
             extra,
             store_root: PathBuf::from("/"),
         })

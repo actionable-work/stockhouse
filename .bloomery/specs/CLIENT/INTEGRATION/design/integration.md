@@ -149,11 +149,14 @@ With `lease.enable`:
   `lease.extraSlots` entry. The service has no `wantedBy` and nothing
   requires or orders itself after it, so it is never part of the boot or
   activation transaction.
-- `stockhouse-lease.timer` (`wantedBy = timers.target`) is the backstop: it
-  starts the service with `OnBootSec = 1min`, `OnUnitActiveSec = 1h`,
-  `OnCalendar = daily`, `Persistent = true` and `RandomizedDelaySec =
-  lease.randomizedDelaySec` (default 600, so a fleet does not renew in the
-  same second).
+- `stockhouse-lease.timer` starts the service at boot and hourly with
+  `OnBootSec = 1min` and `OnUnitActiveSec = 1h`. The separate
+  `stockhouse-lease-daily.timer` handles `OnCalendar = daily` and
+  `Persistent = true`. This keeps the persistent calendar stamp separate
+  from the boot trigger, which must still fire when the timer starts
+  more than a minute after boot. Both timers have
+  `wantedBy = timers.target` and use `lease.randomizedDelaySec` for
+  `RandomizedDelaySec` (default 600).
 - After activation: an activation snippet runs
   `systemctl restart --no-block stockhouse-lease-switch.timer || true`.
   `stockhouse-lease-switch.timer` has no `wantedBy`, `OnActiveSec = 30s` and
@@ -416,9 +419,10 @@ the server-backend node without `v1-only`:
   the next upload fall back to v1 after a new probe.
 - `upload-v2-recovery`: while `drop-publish` exists every publish reply is
   lost, so the job ends uncertain after its bounded resends; after the
-  control is removed the closure is published by a later job through
-  `v2/status` without any NAR being sent twice; the uploader is stopped while a NAR
-  transfer is stalled and restarted, and the uploads keep their identities
+  control is removed a later job sees the committed uploads as
+  `published` through `v2/status` and completes without another NAR or
+  publish request. The uploader is stopped while a NAR transfer is stalled
+  and restarted, and the uploads keep their identities
   and are reconciled with `v2/status` before any NAR is resent; `busy-once`
   delays the group without consuming a record attempt.
 

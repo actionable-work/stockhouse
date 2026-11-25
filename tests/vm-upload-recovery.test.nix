@@ -3,6 +3,7 @@
 args:
 (import ./lib/vm.nix args).story "upload-recovery" {
   backend = "server";
+  fakeProtocol = "v1";
   passthru.bloomery = [
     "CLIENT-INTEGRATION-VM-022"
     "CLIENT-INTEGRATION-VM-023"
@@ -65,5 +66,6 @@ args:
         assert json.loads(machine.succeed(f"cat {QUEUE}/done/{h}.json"))["id"] == record_id
         assert upload_ids(h) == {record_id}
         assert fake_lines(h)[-1].endswith("published")
+    assert_v1_fallback()
   '';
 }

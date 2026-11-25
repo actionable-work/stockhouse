@@ -1,0 +1,12 @@
+[dependencies]
+stockhouse-credentials = { workspace = true }
+stockhouse-ingest = { workspace = true }
+stockhouse-proto = { workspace = true }
+
+[package]
+name = "stockhouse-test-support"
+publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true

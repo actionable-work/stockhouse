@@ -281,10 +281,10 @@ client's handling is explained:
 
 ## Upload and lease protocol v2
 
-Protocol v2 keeps every guarantee of v1 (stable client `UploadId`s as
-idempotency keys, verified NAR streaming, typed reply classification, strict
-bounded parsing, no authority from identifiers, v1 lease semantics) and
-changes only how many requests a closure costs.
+Protocol v2 batches control requests and separates verified NAR transfer
+from publication. It uses stable client `UploadId`s as idempotency keys,
+strict bounded codecs, verified streaming and the same lease slot
+semantics.
 
 ### Why v2
 
@@ -311,7 +311,7 @@ v2 lives in `stockhouse-wire-v2` (`packages/rust/libs/wire_v2`), a pure crate
 over `stockhouse-wire` and `stockhouse-proto` with the same split of
 responsibilities as v1: it renders request bodies and paths and classifies
 replies; HTTP, credentials, concurrency and retries belong to the uploader
-and the lease client. v1 stays supported and unchanged.
+and the lease client. The client also supports protocol v1.
 
 ### Versions and negotiation
 
@@ -401,8 +401,19 @@ NARs of one closure can be sent concurrently in any order and the closure is
 published in a few requests in reference order.
 
 A `verified` upload stays `verified` until it is published or the server
-forgets it; a forgotten upload is `unknown_upload`, as in v1, and the client
-declares it again.
+forgets it. The server retains a verified, unpublished upload for at least
+24 hours from verification. A forgotten upload is `unknown_upload` and
+the client declares it again.
+
+Tenant byte quota is charged at publish. Declare and NAR admission may
+return `quota_exceeded` only if the path's incremental charge would exceed
+the quota based on published usage alone. Retained verified bytes,
+including those of the path's referrers, do not count toward that decision
+or impose a separate tenant admission cap. A referrer can finish transfer
+first and still needs its dependency to transfer before either can publish.
+A configured cap on retained verified bytes cannot block dependencies at
+any scope, even through a retryable reply. The server may return `Busy` or
+`Unavailable` for a temporary staging outage.
 
 ### Declare batches
 
@@ -431,11 +442,17 @@ Limits, enforced by the builder and by `parse`:
   always fits, and a thousand typical entries (about a kilobyte each) use a
   small fraction of it.
 
-`DeclareBatch::new()` starts empty and `push(id, declaration)` returns
-`BatchFull` instead of adding an entry that would exceed either limit, so
-the client starts the next batch with that entry; a rendered batch therefore
-always parses. `parse` (for test fixtures and servers written against this
-crate) is strict and checks, in order:
+`DeclareBatch::new()` starts empty and `push(id, declaration)` rejects an
+already used `id` or `store_path` with
+`DeclarePushError::Duplicate { index }`, where `index` is the zero-based
+position the entry would occupy. Otherwise, pushing an entry that would
+exceed either limit returns `DeclarePushError::BatchFull`, so the client
+starts the next batch with that entry. A failed push leaves the batch
+unchanged. Rendering an empty batch returns `BatchError::Count`. Every
+successful render therefore parses back to the same batch.
+
+`parse` (for test fixtures and servers written against this crate) is
+strict and checks, in order:
 
 1. More than 8 MiB of input: `BatchError::TooLarge`, without parsing JSON.
 2. Not an object of exactly `version` and `uploads`, an entry that is not an
@@ -568,7 +585,9 @@ Publish and status, like declare and the NAR transfer, see only uploads of
 | 503 | any body | `Unavailable { retry_after }` |
 
 There is no 422: references are checked at publish. Anything else is
-`Unexpected`, and a body over 64 KiB is `TooLarge`. `verified` is durable
+`Unexpected`. A body over 64 KiB is `TooLarge` for statuses with a parsed
+body, except that an oversized 404 is `NotSupported` without parsing.
+`verified` is durable
 before the reply, so a client that received it never sends that NAR again.
 Sending a NAR to an upload that is already `verified` reports `verified`
 and changes nothing.
@@ -588,7 +607,12 @@ cap. Parse errors are `LeaseBatchError::{TooLarge, Malformed,
 UnsupportedVersion, Count, InvalidField { index, field }, Duplicate { index
 }}`, checked in that order. Each entry means exactly what one v1
 `PUT leases/<machine>/<slot>` means: the same account binding, rebinding and
-slot semantics.
+slot semantics. Every successful renewal sets the current binding of that
+`(machine, slot)` to the requested store path and renews its lifetime. A
+repeat for the currently bound path renews the same lease. A request for
+A, then B, then A again binds the slot to A after the third request. The
+slot key identifies a single lease, and the latest successful application
+determines its binding.
 
 A lease result echoes its entry's `machine` and `slot`:
 `{"machine":…,"slot":…,"state":"renewed"}` (`Renewed`) or
@@ -600,10 +624,12 @@ values are `Unexpected { status: 200 }`.
 
 ### Retries and backoff
 
-Every v2 request is idempotent: resending an identical request, or sending
-an entry again in a later batch, yields each entry's current state and
-changes nothing already done. There is no batch identity; idempotency is per
-entry through the `UploadId` (uploads) or `(machine, slot)` (leases).
+There is no batch identity. For uploads, repeating an entry for the same
+`UploadId` returns its current state and does not repeat a completed state
+change or charge. For leases, applying an entry again renews its requested
+binding in the same slot without creating a second lease. Lease lifetime
+and binding changes follow the order in which successful renewals are
+applied.
 
 | Reply | Class | Client behavior |
 | --- | --- | --- |
@@ -615,7 +641,7 @@ entry through the `UploadId` (uploads) or `(machine, slot)` (leases).
 | `Busy`, `Unavailable`, transport error, timeout | retryable | resend the identical request at most twice in the same job, waiting `min(retry_after, 30)` seconds, or 2 then 4 seconds without `retry_after`; then retry the job |
 
 A batch request answered by a timeout or transport error after it was sent
-may have been applied; resending it is safe by idempotency. Because a
+may have been applied. Resends use the same per-entry rules. Because a
 durable commit can take about a second and a server merges concurrent
 commits, the client's per-request timeout (60 seconds by default) leaves
 ample room. The client never has two requests carrying the same entry in

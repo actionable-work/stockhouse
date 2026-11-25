@@ -8,10 +8,11 @@ use stockhouse_ingest::{
     BackendConfig, DeferredUploader, NixCopyUploader, NixPathInfoScanner, NoScanner, Queue,
     Scanner, ScannerConfig, Uploader, UploaderConfig, Worker, hook,
 };
+use stockhouse_lease::{LeaseConfig, effective_uid, run_lease};
 use stockhouse_proto::PROTOCOL_VERSION;
 use stockhouse_proxy::ProxyConfig;
-use stockhouse_upload::lease::{LeaseConfig, effective_uid, run_lease};
 use stockhouse_upload::{ServerEndpoint, ServerUploader};
+use stockhouse_upload_v2::ServerBackend;
 
 pub(crate) const EXIT_FAILURE: u8 = 1;
 
@@ -147,11 +148,15 @@ fn backend(
         (BackendConfig::NixCopy { destination, nix }, _) => {
             Box::new(NixCopyUploader::new(nix.clone(), destination.clone()))
         }
-        (BackendConfig::Server(server), Some(endpoint)) => Box::new(ServerUploader::new(
-            endpoint,
-            server.nix.clone(),
-            server.max_closure_paths,
-            queue.clone(),
+        (BackendConfig::Server(server), Some(endpoint)) => Box::new(ServerBackend::new(
+            ServerUploader::new(
+                endpoint,
+                server.nix.clone(),
+                server.max_closure_paths,
+                queue.clone(),
+            ),
+            server.protocol,
+            usize::try_from(server.max_inflight_nars).expect("validated NAR concurrency"),
         )),
         (BackendConfig::Server(_), None) => {
             unreachable!("server_endpoint builds the endpoint of every server backend")

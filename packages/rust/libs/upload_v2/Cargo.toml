@@ -1,0 +1,21 @@
+[dependencies]
+reqwest = { features = ["blocking"], workspace = true }
+stockhouse-auth = { workspace = true }
+stockhouse-credentials = { workspace = true }
+stockhouse-ingest = { workspace = true }
+stockhouse-proto = { workspace = true }
+stockhouse-upload = { workspace = true }
+stockhouse-wire = { workspace = true }
+stockhouse-wire-v2 = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+stockhouse-test-support = { workspace = true }
+
+[package]
+name = "stockhouse-upload-v2"
+publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true

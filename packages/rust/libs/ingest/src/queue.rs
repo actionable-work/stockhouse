@@ -168,6 +168,37 @@ impl Queue {
         }
     }
 
+    pub(crate) fn pending_path(&self, path: &StorePath) -> PathBuf {
+        self.path("pending", path.hash().as_str(), ".json")
+    }
+
+    pub(crate) fn read_pending(
+        &self,
+        path: &StorePath,
+    ) -> Result<Option<Result<Record, ()>>, QueueError> {
+        self.read_pending_hash(path.hash().as_str()).map(|record| {
+            record.map(|record| {
+                record.and_then(|record| (&record.store_path == path).then_some(record).ok_or(()))
+            })
+        })
+    }
+
+    pub(crate) fn read_pending_hash(
+        &self,
+        hash: &str,
+    ) -> Result<Option<Result<Record, ()>>, QueueError> {
+        self.read_record(&self.path("pending", hash, ".json"))
+            .map(|record| {
+                record.map(|record| {
+                    record.and_then(|record| {
+                        (record.store_path.hash().as_str() == hash)
+                            .then_some(record)
+                            .ok_or(())
+                    })
+                })
+            })
+    }
+
     /// Whether a path is in the upload ledger.
     pub fn is_uploaded(&self, path: &StorePath) -> bool {
         self.is_uploaded_hash(path.hash().as_str())
@@ -177,10 +208,17 @@ impl Queue {
         self.path("done", hash, ".json").exists()
     }
 
-    pub(crate) fn write_done(&self, record: &Record, now: u64) -> Result<(), QueueError> {
-        let bytes = done_bytes(&record.id, &record.store_path, now);
-        let target = self.path("done", record.store_path.hash().as_str(), ".json");
-        fsutil::replace(&self.tmp(), &target, &bytes).map_err(io_err("write done"))
+    pub(crate) fn write_done(
+        &self,
+        path: &StorePath,
+        id: UploadId,
+        now: u64,
+    ) -> Result<(), QueueError> {
+        let bytes = done_bytes(&id, path, now);
+        let target = self.path("done", path.hash().as_str(), ".json");
+        fsutil::create_new(&self.tmp(), &target, &bytes)
+            .map(|_| ())
+            .map_err(io_err("write done"))
     }
 
     /// The done record for a path, if uploaded.
