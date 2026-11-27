@@ -7,9 +7,9 @@ manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
-trigger = "the uploader reports `Uploaded` for a job"
+trigger = "the uploader reports `Uploaded` for a job whose path is not already ledgered"
 system = "uploader pass"
-action = "write a done record carrying the job's identity and then remove its pending record"
+action = "write a done record carrying the current pending identity and then remove its pending record"
 
 [[requirements]]
 id = "CLIENT-INGEST-RETRY-002"
@@ -18,7 +18,7 @@ manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
-trigger = "the uploader reports `Retry` with `Transient` or `Uncertain`"
+trigger = "the uploader reports `Retry` with `Transient` or `Uncertain` for a job whose path is not already ledgered"
 system = "uploader pass"
 action = "increment attempts, set `next_attempt_at` to now plus `min(base * 2^(attempts-1), max)`, record the message and keep the identity"
 
@@ -29,7 +29,7 @@ manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
-trigger = "the uploader reports `Retry` with `QuotaExceeded`"
+trigger = "the uploader reports `Retry` with `QuotaExceeded` for a job whose path is not already ledgered"
 system = "uploader pass"
 action = "increment attempts, set `next_attempt_at` to now plus the maximum backoff and keep the identity"
 
@@ -40,7 +40,7 @@ manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
-trigger = "the uploader reports `Deferred`"
+trigger = "the uploader reports `Deferred` for a job whose path is not already ledgered"
 system = "uploader pass"
 action = "leave attempts unchanged, set `next_attempt_at` to now plus the maximum backoff and keep the record pending"
 
@@ -51,7 +51,7 @@ manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
-trigger = "a `Retry` outcome brings attempts to `max_attempts`"
+trigger = "a `Retry` outcome for a path not already ledgered brings attempts to `max_attempts`"
 system = "uploader pass"
 action = "move the record to `failed/` with its identity and last error"
 
@@ -62,7 +62,7 @@ manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
-trigger = "the uploader reports `Rejected`"
+trigger = "the uploader reports `Rejected` for a job whose path is not already ledgered"
 system = "uploader pass"
 action = "move the record to `failed/` with the rejection message as its reason"
 
@@ -75,7 +75,7 @@ design = "design/ingest.md"
 type = "event"
 trigger = "a queue is reopened by a new process after a retry outcome"
 system = "uploader pass"
-action = "present the same identity to the uploader on every later attempt of that path"
+action = "present the same identity to the uploader on later attempts until the server reports it has forgotten that identity"
 
 [[requirements]]
 id = "CLIENT-INGEST-RETRY-008"

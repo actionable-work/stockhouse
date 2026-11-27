@@ -3,6 +3,7 @@
 args:
 (import ./lib/vm.nix args).story "lease" {
   backend = "server";
+  fakeProtocol = "v1";
   passthru.bloomery = [
     "CLIENT-INTEGRATION-VM-025"
     "CLIENT-INTEGRATION-VM-026"
@@ -75,5 +76,6 @@ args:
         )
         assert lease_status()["Result"] == "success", lease_status()
         machine.succeed(f"test -f {QUEUE}/pending/{store_hash(pending)}.json")
+    assert_v1_fallback()
   '';
 }

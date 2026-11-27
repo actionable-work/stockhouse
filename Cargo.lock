@@ -1275,12 +1275,14 @@ dependencies = [
  "stockhouse-auth",
  "stockhouse-credentials",
  "stockhouse-ingest",
+ "stockhouse-lease",
  "stockhouse-oauth-fake",
  "stockhouse-proto",
  "stockhouse-proxy",
  "stockhouse-signin",
  "stockhouse-token-store",
  "stockhouse-upload",
+ "stockhouse-upload-v2",
  "tokio",
 ]
 
@@ -1301,8 +1303,24 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+ "stockhouse-proto",
+ "stockhouse-uploader-config",
+]
+
+[[package]]
+name = "stockhouse-lease"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "libc",
+ "reqwest",
+ "serde",
  "stockhouse-credentials",
  "stockhouse-proto",
+ "stockhouse-test-support",
+ "stockhouse-upload",
+ "stockhouse-wire",
+ "stockhouse-wire-v2",
  "toml",
 ]
 
@@ -1377,6 +1395,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "stockhouse-test-support"
+version = "0.1.0"
+dependencies = [
+ "stockhouse-credentials",
+ "stockhouse-ingest",
+ "stockhouse-proto",
+]
+
+[[package]]
 name = "stockhouse-token-store"
 version = "0.1.0"
 dependencies = [
@@ -1394,16 +1421,42 @@ dependencies = [
 name = "stockhouse-upload"
 version = "0.1.0"
 dependencies = [
- "getrandom 0.4.3",
  "libc",
  "reqwest",
- "serde",
  "serde_json",
  "stockhouse-auth",
  "stockhouse-credentials",
  "stockhouse-ingest",
  "stockhouse-proto",
+ "stockhouse-test-support",
  "stockhouse-wire",
+ "stockhouse-wire-v2",
+]
+
+[[package]]
+name = "stockhouse-upload-v2"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "serde_json",
+ "stockhouse-auth",
+ "stockhouse-credentials",
+ "stockhouse-ingest",
+ "stockhouse-proto",
+ "stockhouse-test-support",
+ "stockhouse-upload",
+ "stockhouse-wire",
+ "stockhouse-wire-v2",
+]
+
+[[package]]
+name = "stockhouse-uploader-config"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "stockhouse-credentials",
+ "stockhouse-proto",
+ "stockhouse-wire-v2",
  "toml",
 ]
 
@@ -1414,6 +1467,16 @@ dependencies = [
  "serde",
  "serde_json",
  "stockhouse-proto",
+]
+
+[[package]]
+name = "stockhouse-wire-v2"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "stockhouse-proto",
+ "stockhouse-wire",
 ]
 
 [[package]]

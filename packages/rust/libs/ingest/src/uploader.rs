@@ -43,6 +43,11 @@ pub enum UploadOutcome {
 pub trait Uploader {
     /// Attempts one upload.
     fn upload(&self, job: &UploadJob) -> UploadOutcome;
+
+    /// Attempts each job, returning one outcome per input in the same order.
+    fn upload_batch(&self, jobs: &[UploadJob]) -> Vec<UploadOutcome> {
+        jobs.iter().map(|job| self.upload(job)).collect()
+    }
 }
 
 /// The default backend: nothing is uploaded until a backend is configured.

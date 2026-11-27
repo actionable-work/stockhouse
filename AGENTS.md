@@ -6,10 +6,9 @@ Stockhouse is the open-source Linux cache client for Hammerworks: public
 protocol types, a loopback substitution proxy, server sign-in, durable
 post-build ingestion with authenticated server upload and lease renewal,
 credential sources and a NixOS module. The repository is public. Licensed
-`MIT OR Apache-2.0`. The latest slice is P2.09 server sign-in, upload and
-leases; see `docs/P2_09_CLIENT_SERVER.md` (and the earlier
-`docs/P2_09_CLIENT_GROUNDWORK.md`) for behavior, non-claims and deferred
-work.
+`MIT OR Apache-2.0`. See `docs/P2_11K1_CLIENT_PROTOCOL_V2.md` for
+protocol v2 uploads and lease renewal, and `docs/P2_09_CLIENT_SERVER.md`
+for sign-in.
 
 ## Public/private boundary
 
@@ -51,13 +50,18 @@ This repository is public from its first commit, and the server is private.
 | `packages/rust/libs/auth` | `stockhouse-auth`: sign-in configuration, token and revocation endpoint client, the refreshing `ServerCredential`, logout, status and the `source` factory every consumer uses |
 | `packages/rust/libs/signin` | `stockhouse-signin`: loopback PKCE and device sign-in flows (CLI only) |
 | `packages/rust/libs/oauth_fake` | `stockhouse-oauth-fake`: test-only fake OAuth server and private cache for component tests |
+| `packages/rust/libs/test_support` | `stockhouse-test-support`: shared HTTP stub and fake local store for upload and lease component tests |
 | `packages/rust/libs/proxy` | `stockhouse-proxy`: configuration, tier upstreams, lookup policy and the loopback HTTP server |
 | `packages/rust/libs/ingest` | `stockhouse-ingest`: durable queue, post-build hook, uploader passes, backends, rescan |
+| `packages/rust/libs/uploader_config` | `stockhouse-uploader-config`: uploader configuration and worker limits |
+| `packages/rust/libs/lease` | `stockhouse-lease`: the machine identity, system roots and authenticated lease renewal |
 | `packages/rust/libs/wire` | `stockhouse-wire`: upload and lease protocol v1 codecs (declarations, request paths, reply classification, machine identity, lease slots) |
-| `packages/rust/libs/upload` | `stockhouse-upload`: protocol v1 server upload backend (closure, verified NAR stream, reconciliation) and the lease client |
+| `packages/rust/libs/wire_v2` | `stockhouse-wire-v2`: version negotiation, upload and lease batches, and v2 replies |
+| `packages/rust/libs/upload` | `stockhouse-upload`: v1 upload backend, closure parsing, verified NAR streaming, and shared HTTP and negotiation |
+| `packages/rust/libs/upload_v2` | `stockhouse-upload-v2`: upload protocol selection, closure grouping, concurrent transfers, publish and recovery |
 | `packages/rust/libs/cli` | `stockhouse-cli`: command dispatch and exit status, including `login`, `logout`, `refresh`, `status --config` and `lease` |
 | `nix/module.nix` | The NixOS client module (`nixosModules.default`) |
-| `tests/` | Bloomery test subflake: module evaluation and NixOS VM tests; `tests/lib/fake_server.py` is the VM stories' fake OAuth server and private cache, and `tests/lib/upload_server.py` the fake upload and lease protocol v1 server |
+| `tests/` | Bloomery test subflake: module evaluation and NixOS VM tests; `tests/lib/fake_server.py` is the VM stories' fake OAuth server and private cache, and `tests/lib/upload_server.py` the fake upload and lease server for both wire versions |
 | `.bloomery/specs/CLIENT/` | Code-facing specifications (EARS requirements and designs) |
 | `docs/` | Slice records and follow-ups |
 

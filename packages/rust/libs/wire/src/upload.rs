@@ -177,22 +177,40 @@ impl UploadDeclaration {
             return Err(DeclarationError::Malformed);
         };
         check_version(raw.version).map_err(DeclarationError::UnsupportedVersion)?;
-        let store_path = StorePath::parse(&raw.store_path).map_err(|_| invalid("store_path"))?;
-        let nar_hash = Sha256::parse(&raw.nar_hash).map_err(|_| invalid("nar_hash"))?;
-        if raw.references.len() > MAX_REFERENCES {
+        Self::from_wire_fields(
+            &raw.store_path,
+            &raw.nar_hash,
+            raw.nar_size,
+            &raw.references,
+            deriver.as_deref(),
+            ca,
+        )
+    }
+
+    /// Validates the fields shared by both wire versions.
+    pub fn from_wire_fields(
+        store_path: &str,
+        nar_hash: &str,
+        nar_size: u64,
+        references: &[String],
+        deriver: Option<&str>,
+        ca: Option<String>,
+    ) -> Result<Self, DeclarationError> {
+        let store_path = StorePath::parse(store_path).map_err(|_| invalid("store_path"))?;
+        let nar_hash = Sha256::parse(nar_hash).map_err(|_| invalid("nar_hash"))?;
+        if references.len() > MAX_REFERENCES {
             return Err(invalid("references"));
         }
-        let references = raw
-            .references
+        let references = references
             .iter()
             .map(|r| StorePath::from_basename(r))
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| invalid("references"))?;
         let deriver = deriver
-            .map(|d| StorePath::from_basename(&d))
+            .map(StorePath::from_basename)
             .transpose()
             .map_err(|_| invalid("deriver"))?;
-        Self::new(store_path, nar_hash, raw.nar_size, references, deriver, ca)
+        Self::new(store_path, nar_hash, nar_size, references, deriver, ca)
     }
 }
 

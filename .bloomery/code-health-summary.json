@@ -31,7 +31,7 @@
       "manifest_path": "packages/rust/libs/cli/Cargo.toml",
       "name": "stockhouse-cli",
       "overall_score": 99.09,
-      "sloc": 482,
+      "sloc": 487,
       "subscores": {
         "complexity": 0.75,
         "crateSize": 0.0,
@@ -56,14 +56,27 @@
     {
       "manifest_path": "packages/rust/libs/ingest/Cargo.toml",
       "name": "stockhouse-ingest",
-      "overall_score": 99.73,
-      "sloc": 1497,
+      "overall_score": 99.66,
+      "sloc": 1374,
       "subscores": {
-        "complexity": 0.25,
+        "complexity": 0.24,
         "crateSize": 0.0,
         "duplication": 0.0,
         "nesting": 0.0,
-        "size": 0.02
+        "size": 0.1
+      }
+    },
+    {
+      "manifest_path": "packages/rust/libs/lease/Cargo.toml",
+      "name": "stockhouse-lease",
+      "overall_score": 99.75,
+      "sloc": 622,
+      "subscores": {
+        "complexity": 0.1,
+        "crateSize": 0.0,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.15
       }
     },
     {
@@ -119,6 +132,19 @@
       }
     },
     {
+      "manifest_path": "packages/rust/libs/test_support/Cargo.toml",
+      "name": "stockhouse-test-support",
+      "overall_score": 99.9,
+      "sloc": 397,
+      "subscores": {
+        "complexity": 0.0,
+        "crateSize": 0.0,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.1
+      }
+    },
+    {
       "manifest_path": "packages/rust/libs/token_store/Cargo.toml",
       "name": "stockhouse-token-store",
       "overall_score": 99.89,
@@ -134,23 +160,62 @@
     {
       "manifest_path": "packages/rust/libs/upload/Cargo.toml",
       "name": "stockhouse-upload",
-      "overall_score": 98.87,
-      "sloc": 1532,
+      "overall_score": 99.42,
+      "sloc": 1380,
       "subscores": {
-        "complexity": 0.29,
-        "crateSize": 0.64,
+        "complexity": 0.35,
+        "crateSize": 0.0,
         "duplication": 0.0,
         "nesting": 0.0,
-        "size": 0.2
+        "size": 0.24
+      }
+    },
+    {
+      "manifest_path": "packages/rust/libs/upload_v2/Cargo.toml",
+      "name": "stockhouse-upload-v2",
+      "overall_score": 99.93,
+      "sloc": 1140,
+      "subscores": {
+        "complexity": 0.0,
+        "crateSize": 0.0,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.07
+      }
+    },
+    {
+      "manifest_path": "packages/rust/libs/uploader_config/Cargo.toml",
+      "name": "stockhouse-uploader-config",
+      "overall_score": 100.0,
+      "sloc": 217,
+      "subscores": {
+        "complexity": 0.0,
+        "crateSize": 0.0,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.0
       }
     },
     {
       "manifest_path": "packages/rust/libs/wire/Cargo.toml",
       "name": "stockhouse-wire",
-      "overall_score": 99.82,
-      "sloc": 599,
+      "overall_score": 99.87,
+      "sloc": 616,
       "subscores": {
-        "complexity": 0.18,
+        "complexity": 0.13,
+        "crateSize": 0.0,
+        "duplication": 0.0,
+        "nesting": 0.0,
+        "size": 0.0
+      }
+    },
+    {
+      "manifest_path": "packages/rust/libs/wire_v2/Cargo.toml",
+      "name": "stockhouse-wire-v2",
+      "overall_score": 99.86,
+      "sloc": 831,
+      "subscores": {
+        "complexity": 0.14,
         "crateSize": 0.0,
         "duplication": 0.0,
         "nesting": 0.0,
@@ -158,7 +223,7 @@
       }
     }
   ],
-  "input_digest": "1c6768411d4fc337a3345197bc143ed12ec58d06aa01c92fa2a1c6adce8b6c8d",
+  "input_digest": "905b1255586429cb4f8dd410d3aec4a7899891f35484d54750597242dab460e9",
   "policy": {
     "scoring": {
       "crateSlocLimit": 1500,
@@ -182,15 +247,15 @@
   },
   "schema_version": 4,
   "workspace": {
-    "crate_count": 12,
-    "overall_score": 99.62,
-    "sloc": 9303,
+    "crate_count": 17,
+    "overall_score": 99.75,
+    "sloc": 12257,
     "subscores": {
-      "complexity": 0.23,
-      "crateSize": 0.11,
+      "complexity": 0.18,
+      "crateSize": 0.0,
       "duplication": 0.0,
       "nesting": 0.0,
-      "size": 0.05
+      "size": 0.07
     }
   }
 }

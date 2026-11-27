@@ -1,6 +1,8 @@
 use std::path::PathBuf;
-use stockhouse_ingest::{BackendConfig, ScannerConfig, UploaderConfig, UploaderConfigError};
 use stockhouse_proto::UnsupportedVersion;
+use stockhouse_uploader_config::{
+    BackendConfig, ScannerConfig, UploaderConfig, UploaderConfigError,
+};
 
 const VALID: &str = r#"version = 1
 queue_dir = "/var/lib/stockhouse/queue"
@@ -204,6 +206,64 @@ fn server_backend_configuration_rejects_bad_fields_and_limits() {
         assert_eq!(
             UploaderConfig::parse(&server(&format!("{line}{cred}"))),
             Err(UploaderConfigError::InvalidLimit(field))
+        );
+    }
+}
+
+#[cfg_attr(any(), bloomery("CLIENT-INGEST-CONFIG-007"))]
+#[test]
+fn server_protocol_defaults_to_auto_and_accepts_only_known_modes() {
+    use stockhouse_wire_v2::ProtocolMode;
+
+    let cred = "[backend.credential]\nsystemd = \"private\"\n";
+    for (field, mode) in [
+        ("", ProtocolMode::Auto),
+        ("auto", ProtocolMode::Auto),
+        ("v1", ProtocolMode::V1),
+        ("v2", ProtocolMode::V2),
+    ] {
+        let field = if field.is_empty() {
+            String::new()
+        } else {
+            format!("protocol = \"{field}\"\n")
+        };
+        let BackendConfig::Server(config) =
+            UploaderConfig::parse(&server(&format!("{field}{cred}")))
+                .unwrap()
+                .backend
+        else {
+            panic!("expected server config");
+        };
+        assert_eq!(config.protocol, mode);
+    }
+    assert!(matches!(
+        UploaderConfig::parse(&server(&format!("protocol = \"v3\"\n{cred}"))),
+        Err(UploaderConfigError::Parse(_))
+    ));
+}
+
+#[cfg_attr(any(), bloomery("CLIENT-INGEST-CONFIG-008"))]
+#[test]
+fn nar_concurrency_has_a_default_and_inclusive_limits() {
+    let cred = "[backend.credential]\nsystemd = \"private\"\n";
+    for (field, expected) in [
+        ("", 4),
+        ("max_inflight_nars = 1\n", 1),
+        ("max_inflight_nars = 16\n", 16),
+    ] {
+        let BackendConfig::Server(config) =
+            UploaderConfig::parse(&server(&format!("{field}{cred}")))
+                .unwrap()
+                .backend
+        else {
+            panic!("expected server config");
+        };
+        assert_eq!(config.max_inflight_nars, expected);
+    }
+    for invalid in [-1, 0, 17] {
+        assert_eq!(
+            UploaderConfig::parse(&server(&format!("max_inflight_nars = {invalid}\n{cred}"))),
+            Err(UploaderConfigError::InvalidLimit("max_inflight_nars"))
         );
     }
 }

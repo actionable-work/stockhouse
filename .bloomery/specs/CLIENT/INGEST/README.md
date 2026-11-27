@@ -8,6 +8,7 @@ description: |
   backoff through a pluggable uploader, makes overflow visible, and
   reconciles missed paths by rescanning the local store. The `server`
   backend uploads each built closure to the private tier with protocol v1,
+  or with the batched protocol v2 when the server offers it,
   and the lease client renews this machine's system roots; both live in
   the `stockhouse-upload` crate. Uploader and
   lease failures never fail or block a build, boot or activation.

@@ -3,10 +3,12 @@ serde_json = { workspace = true }
 stockhouse-auth = { workspace = true }
 stockhouse-credentials = { workspace = true }
 stockhouse-ingest = { workspace = true }
+stockhouse-lease = { workspace = true }
 stockhouse-proto = { workspace = true }
 stockhouse-proxy = { workspace = true }
 stockhouse-signin = { workspace = true }
 stockhouse-upload = { workspace = true }
+stockhouse-upload-v2 = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]

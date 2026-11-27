@@ -135,3 +135,20 @@ fn each_request_has_a_bounded_total_time() {
         "{outcome:?}"
     );
 }
+
+#[cfg_attr(any(), bloomery("CLIENT-INGEST-SERVER-003"))]
+#[test]
+fn a_public_request_cannot_escape_the_private_tier() {
+    let endpoint = endpoint("http://127.0.0.1:1/t/1/", 1);
+    let secret = endpoint.credential().unwrap();
+    for path in [
+        "../2/protocol",
+        "https://example.invalid/protocol",
+        "..%2f2/protocol",
+    ] {
+        let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = endpoint.request(reqwest::Method::GET, path, &secret, endpoint.timeout());
+        }));
+        assert!(rejected.is_err(), "{path}");
+    }
+}

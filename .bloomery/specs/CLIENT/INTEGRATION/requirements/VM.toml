@@ -307,3 +307,80 @@ type = "event"
 trigger = "a derivation is built while the uploader is stopped and the VM reboots with the server backend"
 system = "installed client"
 action = "upload it to the fake server after the reboot with the identity assigned before the reboot"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-029"
+title = "v1 servers are qualified through the auto fallback"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the `upload`, `upload-recovery` and `lease` stories run against the fake server in `v1-only` mode with `uploader.protocol` left at `auto`"
+system = "installed client"
+action = "pass those stories with v1 requests only, after a protocol probe answered 404"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-030"
+title = "A closure uploads in a few batched requests"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "a closure of about twenty new paths, one of them already held by the fake server, is queued with protocol v2 available"
+system = "installed client"
+action = "upload it with one probe, one `v2/declare`, one `v2/nar` transfer per path not held, at most `maxInflightNars` concurrently, and one `v2/publish`, sending no v1 request and no NAR for the held path"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-031"
+title = "Leases renew in one batch with protocol v2"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the lease service runs with protocol v2 available"
+system = "installed client"
+action = "renew slots 1 and 2 with one `v2/leases` request and exit 0"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-032"
+title = "A withdrawn v2 falls back to v1 at runtime"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the fake server switches to `v1-only` while the uploader runs and a further derivation is built"
+system = "installed client"
+action = "upload it with v1 requests after a new protocol probe, with the record retried rather than failed"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-033"
+title = "A lost publish reply is reconciled without resending NARs"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the fake server commits every publish batch and closes the connection without replying until `drop-publish` is removed"
+system = "installed client"
+action = "end the job uncertain after the bounded resends, and after the control is removed complete a later job through `v2/status` reporting the uploads as published, with each NAR sent exactly once and no further publish request"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-034"
+title = "A restart during a v2 transfer keeps identities and asks first"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the uploader is stopped while a v2 NAR transfer is stalled and then started again after the stall is released"
+system = "installed client"
+action = "query the stalled upload with `v2/status` before any NAR is resent and complete the closure with the identities assigned before the restart"
+
+[[requirements]]
+id = "CLIENT-INTEGRATION-VM-035"
+title = "A busy server delays without consuming attempts"
+manual = false
+design = "design/integration.md"
+[requirements.ears]
+type = "event"
+trigger = "the fake server answers the next v2 batch request 429 with `Retry-After: 1`"
+system = "installed client"
+action = "resend the identical request after about one second and complete the upload with the record attempts unchanged"

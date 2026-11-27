@@ -194,9 +194,9 @@ manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
-trigger = "`Queue::upload_state` is called for a dependency path, repeatedly or by a new process"
+trigger = "`Queue::upload_state` is called for a path with no valid pending record, repeatedly or by a new process"
 system = "queue"
-action = "create the entry with `nar_sent = false` and the identity of the path's pending record if one exists, otherwise a fresh identity, by staged hard link on first use, and return the same identity on every later call"
+action = "create the entry by staged hard link with a fresh identity and `nar_sent = false` on first use, and return the existing valid entry on later calls"
 
 [[requirements]]
 id = "CLIENT-INGEST-QUEUE-019"
@@ -205,9 +205,9 @@ manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
-trigger = "`Queue::upload_state` is called for the record's own path with its identity"
+trigger = "`Queue::upload_state` is called for a path with a valid pending record, as a root or a dependency"
 system = "queue"
-action = "return an entry with that identity, replacing an existing entry with another identity by one with `nar_sent = false`"
+action = "use the current pending record identity, durably writing an entry with `nar_sent = false` if the entry is absent or has another identity, and otherwise leave the mark unchanged"
 
 [[requirements]]
 id = "CLIENT-INGEST-QUEUE-020"
@@ -233,12 +233,12 @@ action = "have replaced the entry atomically with the new `nar_sent` value and s
 
 [[requirements]]
 id = "CLIENT-INGEST-QUEUE-022"
-title = "Completing a dependency writes the ledger first"
+title = "Completing a path writes the ledger first"
 manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
-trigger = "`Queue::complete_path` records a dependency as uploaded"
+trigger = "`Queue::complete_path` records a path as uploaded"
 system = "queue"
 action = "write `done/<hash>.json` with the entry's identity when absent and only then remove the `uploads/` entry"
 
@@ -263,3 +263,36 @@ type = "event"
 trigger = "`Queue::forget_done` is called for a path"
 system = "queue"
 action = "remove that path's done record so the path is no longer reported uploaded"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-025"
+title = "Renewed identities are durable and kept by the record"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a root or dependency identity is renewed with `Queue::renew_identity`, including a crash between its writes"
+system = "queue"
+action = "durably write a fresh `UploadId` to the path's valid pending record if one exists, preserving all other fields, then durably write the `uploads/` entry with that identity and `nar_sent = false` before returning, and repair a torn renewal from the pending record on the next lookup for either role"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-026"
+title = "Outcomes use the current pending identity"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the worker applies an outcome after an earlier upload renewed the pending record identity"
+system = "uploader worker"
+action = "reread the record and use its current identity in any pending, failed or done record written for the outcome"
+
+[[requirements]]
+id = "CLIENT-INGEST-QUEUE-027"
+title = "Ledger completion supersedes a queued outcome"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the worker applies an outcome for a path already in the ledger, including one that a later group completed as a dependency"
+system = "uploader worker"
+action = "keep the existing done record, remove the pending record and count the job as uploaded without moving it to failed or scheduling a retry"

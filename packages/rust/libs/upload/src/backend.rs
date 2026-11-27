@@ -15,8 +15,8 @@ use stockhouse_ingest::{
 };
 use stockhouse_proto::{ServedIntegrity, StorePath, UploadId};
 use stockhouse_wire::{
-    MAX_BODY, RequestKind, UploadDeclaration, UploadRefusal, UploadReply, UploadState, nar_path,
-    parse_reply, upload_path,
+    MAX_BODY, RequestKind, UploadRefusal, UploadReply, UploadState, nar_path, parse_reply,
+    upload_path,
 };
 
 /// Declare, NAR and status requests allowed per path per job.
@@ -47,6 +47,22 @@ impl ServerUploader {
             queue,
             budget: PATH_BUDGET,
         }
+    }
+
+    pub fn endpoint(&self) -> &ServerEndpoint {
+        &self.endpoint
+    }
+
+    pub fn nix(&self) -> &std::path::Path {
+        &self.nix
+    }
+
+    pub fn queue(&self) -> &Queue {
+        &self.queue
+    }
+
+    pub fn max_closure_paths(&self) -> usize {
+        self.max_closure_paths
     }
 
     /// Lowers the per-path request budget (tests only).
@@ -136,7 +152,6 @@ impl ServerUploader {
         let mut run = Job {
             up: self,
             root,
-            root_id: job.id,
             closure,
             rank,
             secret,
@@ -152,6 +167,7 @@ struct PathState {
     requests: u8,
     missing_round: bool,
     redeclared: bool,
+    renewed: bool,
 }
 
 enum Step {
@@ -175,7 +191,6 @@ enum PathEnd {
 struct Job<'a> {
     up: &'a ServerUploader,
     root: &'a StorePath,
-    root_id: UploadId,
     closure: BTreeMap<StorePath, ClosureEntry>,
     rank: HashMap<StorePath, usize>,
     secret: Secret,
@@ -217,12 +232,7 @@ impl Job<'_> {
     }
 
     fn upload_path(&mut self, path: &StorePath) -> Result<PathEnd, Done> {
-        let root_id = (path == self.root).then_some(self.root_id);
-        let mut entry = self
-            .up
-            .queue
-            .upload_state(path, root_id)
-            .map_err(queue_failed)?;
+        let mut entry = self.up.queue.upload_state(path).map_err(queue_failed)?;
         let mut step = if entry.nar_sent {
             Step::Reconcile
         } else {
@@ -262,16 +272,8 @@ impl Job<'_> {
     }
 
     fn declaration(&self, path: &StorePath) -> Result<Vec<u8>, Done> {
-        let e = &self.closure[path];
-        let declaration = UploadDeclaration::new(
-            e.path.clone(),
-            e.nar_hash,
-            e.nar_size,
-            e.references.clone(),
-            e.deriver.clone(),
-            e.ca.clone(),
-        );
-        declaration
+        self.closure[path]
+            .declaration()
             .map(|d| d.render())
             .map_err(|_| UploadOutcome::Rejected(format!("{path}: invalid declaration")))
     }
@@ -388,6 +390,13 @@ impl Job<'_> {
             UploadReply::State(_) => Ok(Flow::Complete),
             UploadReply::Refused(UploadRefusal::MissingReferences(m)) => {
                 self.missing_round(path, RequestKind::Declare, m)
+            }
+            UploadReply::Refused(UploadRefusal::UnknownUpload) => {
+                if std::mem::replace(&mut self.state(path).renewed, true) {
+                    return Err(transient(path, "POST declare: unknown_upload"));
+                }
+                *entry = self.up.queue.renew_identity(path).map_err(queue_failed)?;
+                Ok(Flow::Next(Step::Declare))
             }
             UploadReply::Refused(refusal) => {
                 self.refusal(path, RequestKind::Declare, refusal, false)

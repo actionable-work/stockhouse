@@ -5,13 +5,18 @@ members = [
   "packages/rust/libs/cli",
   "packages/rust/libs/credentials",
   "packages/rust/libs/ingest",
+  "packages/rust/libs/lease",
   "packages/rust/libs/oauth_fake",
   "packages/rust/libs/proto",
   "packages/rust/libs/proxy",
   "packages/rust/libs/signin",
+  "packages/rust/libs/test_support",
   "packages/rust/libs/token_store",
   "packages/rust/libs/upload",
+  "packages/rust/libs/upload_v2",
+  "packages/rust/libs/uploader_config",
   "packages/rust/libs/wire",
+  "packages/rust/libs/wire_v2",
 ]
 resolver = "2"
 
@@ -56,13 +61,18 @@ stockhouse-auth = { default-features = false, path = "packages/rust/libs/auth" }
 stockhouse-cli = { default-features = false, path = "packages/rust/libs/cli" }
 stockhouse-credentials = { default-features = false, path = "packages/rust/libs/credentials" }
 stockhouse-ingest = { default-features = false, path = "packages/rust/libs/ingest" }
+stockhouse-lease = { default-features = false, path = "packages/rust/libs/lease" }
 stockhouse-oauth-fake = { default-features = false, path = "packages/rust/libs/oauth_fake" }
 stockhouse-proto = { default-features = false, path = "packages/rust/libs/proto" }
 stockhouse-proxy = { default-features = false, path = "packages/rust/libs/proxy" }
 stockhouse-signin = { default-features = false, path = "packages/rust/libs/signin" }
+stockhouse-test-support = { default-features = false, path = "packages/rust/libs/test_support" }
 stockhouse-token-store = { default-features = false, path = "packages/rust/libs/token_store" }
 stockhouse-upload = { default-features = false, path = "packages/rust/libs/upload" }
+stockhouse-upload-v2 = { default-features = false, path = "packages/rust/libs/upload_v2" }
+stockhouse-uploader-config = { default-features = false, path = "packages/rust/libs/uploader_config" }
 stockhouse-wire = { default-features = false, path = "packages/rust/libs/wire" }
+stockhouse-wire-v2 = { default-features = false, path = "packages/rust/libs/wire_v2" }
 tokio = { default-features = false, features = [
   "fs",
   "io-util",

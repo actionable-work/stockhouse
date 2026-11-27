@@ -95,7 +95,7 @@ manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
-trigger = "a slot is renewed"
+trigger = "a slot is renewed using protocol v1"
 system = "lease client"
 action = "send `PUT leases/<machine-id>/<slot>` with `Content-Type: application/json` and `{\"version\":1,\"store_path\":…}` under the server endpoint rules"
 
@@ -106,7 +106,7 @@ manual = false
 design = "design/ingest.md"
 [requirements.ears]
 type = "event"
-trigger = "a slot is refused, answered 503 (including a full machine table) or fails in transport or by timeout"
+trigger = "a v1 slot renewal is refused, answered 503 (including a full machine table) or fails in transport or by timeout"
 system = "lease client"
 action = "log the slot and the code or failure and still renew every later slot"
 
@@ -131,3 +131,91 @@ type = "event"
 trigger = "the lease command runs twice with the same system"
 system = "lease client"
 action = "send the same requests both times and change no local state other than creating a missing machine identity"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-013"
+title = "v2 leases renew in one request"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the lease client has at least one resolved slot and selects protocol version 2"
+system = "lease client"
+action = "renew every resolved slot with one `POST v2/leases` in slot order and map `Renewed` to renewed, `Refused(UnknownPath | Conflict)` to refused and `MachinesFull` to failed, and a request-level `Refused(BadRequest)` to every slot refused"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-014"
+title = "A lease batch without v2 falls back within an auto run"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a lease batch is answered `NotSupported` under `protocol = \"auto\"`"
+system = "lease client"
+action = "renew each slot in the same run with v1 `PUT leases/<machine>/<slot>`"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-015"
+title = "Lease batch outages resend and then fail"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a lease batch is answered `Busy`, `Unavailable`, a transport error or a timeout"
+system = "lease client"
+action = "resend it identically at most twice with the batch waits, then treat every slot as failed and exit 75"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-016"
+title = "Lease probe failures fail every slot"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the lease client probe fails, or offers no version 2 under `protocol = \"v2\"`"
+system = "lease client"
+action = "send no renewal and exit 75 with every slot failed"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-017"
+title = "Auto lease runs follow the probe"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the lease client has resolved slots and runs with `protocol = \"auto\"` against a server whose probe offers `[1, 2]`, offers `[1]` or answers 404"
+system = "lease client"
+action = "send one probe, then renew with one v2 lease batch for `[1, 2]` and with v1 per-slot requests otherwise"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-018"
+title = "A lease probe answered 401 follows the 401 rule"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "the lease client probe is answered `Unauthorized`"
+system = "lease client"
+action = "send the probe once more only after a successful `CredentialSource::invalidate`, and otherwise, or when that is also `Unauthorized`, send no renewal and exit 75 with every slot failed"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-019"
+title = "Required v2 leases never fall back"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a lease batch is answered `NotSupported` under `protocol = \"v2\"`"
+system = "lease client"
+action = "send no v1 request and exit 75 with every slot failed"
+
+[[requirements]]
+id = "CLIENT-INGEST-LEASE-020"
+title = "A run with no resolved slots needs no network request"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a lease run with a usable machine identity and credential resolves no slot to a store path"
+system = "lease client"
+action = "log the applicable skipped slots and exit 0 without sending a probe or renewal"

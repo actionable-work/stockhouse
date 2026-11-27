@@ -82,7 +82,7 @@ impl fmt::Display for InvalidCredential {
 
 /// The outcome of one HTTP exchange.
 #[derive(Debug)]
-pub(crate) enum Exchange {
+pub enum Exchange {
     /// A reply with its (capped) body; `None` when the body exceeded the cap.
     Reply(u16, Option<Vec<u8>>),
     /// A transport error or timeout.
@@ -157,25 +157,39 @@ impl ServerEndpoint {
     }
 
     /// Reads the credential now.
-    pub(crate) fn credential(&self) -> Result<Secret, CredentialError> {
+    pub fn credential(&self) -> Result<Secret, CredentialError> {
         self.source.credential()
     }
 
     /// Reports a 401 for `sent`; `true` when a retry is worthwhile.
-    pub(crate) fn invalidate(&self, sent: &Secret) -> bool {
+    pub fn invalidate(&self, sent: &Secret) -> bool {
         self.source.invalidate(sent)
     }
 
     /// A request to `base` joined with a protocol path. A credential that is
     /// not a valid header value is refused, never sent as an empty bearer.
-    pub(crate) fn request(
+    ///
+    /// # Panics
+    ///
+    /// Panics if `rel` is not a relative protocol path made of nonempty,
+    /// slash-separated segments of ASCII letters, digits and hyphens.
+    pub fn request(
         &self,
         method: Method,
         rel: &str,
         secret: &Secret,
         timeout: Duration,
     ) -> Result<RequestBuilder, InvalidCredential> {
-        let url = self.base.join(rel).expect("protocol paths are relative");
+        assert!(
+            rel.split('/').all(|segment| {
+                !segment.is_empty()
+                    && segment
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+            }),
+            "protocol path must be relative to the server base URL"
+        );
+        let url = self.base.join(rel).expect("validated protocol path");
         let mut bearer = b"Bearer ".to_vec();
         bearer.extend_from_slice(secret.expose());
         let value = HeaderValue::from_bytes(&bearer);
@@ -190,7 +204,7 @@ impl ServerEndpoint {
     }
 
     /// Sends a request and reads at most `limit` bytes of the reply.
-    pub(crate) fn exchange(&self, request: RequestBuilder, limit: usize) -> Exchange {
+    pub fn exchange(&self, request: RequestBuilder, limit: usize) -> Exchange {
         match request.send() {
             Ok(response) => read_reply(response, limit),
             Err(_) => Exchange::Failed,

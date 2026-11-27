@@ -1,0 +1,14 @@
+[dependencies]
+serde = { workspace = true }
+stockhouse-credentials = { workspace = true }
+stockhouse-proto = { workspace = true }
+stockhouse-wire-v2 = { workspace = true }
+toml = { workspace = true }
+
+[package]
+name = "stockhouse-uploader-config"
+publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true

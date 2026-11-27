@@ -384,3 +384,14 @@ type = "event"
 trigger = "a path has used 8 declare, NAR and status requests in one job, not counting single retries after a successful `invalidate`"
 system = "server backend"
 action = "send no further request for it and return `Retry(Transient)`"
+
+[[requirements]]
+id = "CLIENT-INGEST-SERVER-036"
+title = "A forgotten identity is renewed once"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a v1 declaration is answered `unknown_upload`"
+system = "server backend"
+action = "call `Queue::renew_identity` for that path, send no NAR under the old identity, and declare it again with the new identity, at most once per path per job, returning `Retry(Transient)` on a second occurrence"

@@ -9,7 +9,9 @@ description: |
   verification and streaming content integrity checks. `stockhouse-wire`
   builds on these types and owns the client-to-server upload and lease
   protocol v1 codecs: declarations, lease requests, machine identities,
-  request paths and strict reply classification.
+  request paths and strict reply classification. `stockhouse-wire-v2` adds
+  protocol v2: version negotiation and batched declare, publish, status and
+  lease codecs with per-entry results.
 ---
 
 # Public Protocol Types

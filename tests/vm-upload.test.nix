@@ -4,7 +4,9 @@
 args:
 (import ./lib/vm.nix args).story "upload" {
   backend = "server";
+  fakeProtocol = "v1";
   passthru.bloomery = [
+    "CLIENT-INTEGRATION-VM-029"
     "CLIENT-INTEGRATION-VM-019"
     "CLIENT-INTEGRATION-VM-020"
     "CLIENT-INTEGRATION-VM-021"
@@ -56,5 +58,6 @@ args:
         machine.wait_until_succeeds(f"test -f {QUEUE}/failed/{store_hash(e)}.json", timeout=120)
         failed = json.loads(machine.succeed(f"cat {QUEUE}/failed/{store_hash(e)}.json"))
         assert "verification_failed" in failed["reason"], failed
+    assert_v1_fallback()
   '';
 }

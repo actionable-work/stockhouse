@@ -89,17 +89,14 @@ that wire state per store path, so overlapping closures share it:
 {"version":1,"id":"<UploadId>","store_path":"/nix/store/…","nar_sent":false}
 ```
 
-- `Queue::upload_state(path, root_id)` returns the entry for `path`. For the
-  record's own path (`root_id` is `Some`) the identity is always the record's
-  `id`: an existing entry with another identity, possible only when the path
-  was first uploaded as a dependency and then queued, is replaced by one with
-  `root_id` and `nar_sent = false`. For a dependency (`root_id` is `None`) an
-  existing entry is returned unchanged; otherwise a new entry with
-  `nar_sent = false` is staged and hard-linked into place, so the first
-  identity wins, and the winner is read back. The new entry's identity is
-  that of the path's own pending record when one exists, so a path that is
-  both queued and a dependency keeps one identity, and a fresh `UploadId`
-  otherwise.
+- `Queue::upload_state(path)` reads the path's current pending record for
+  both roots and dependencies. A valid pending record's `id` is
+  authoritative. If the `uploads/` entry is absent or has a different
+  identity, write a durable entry with the record's identity and
+  `nar_sent = false`. If the identities match, keep the existing mark.
+  Without a valid pending record, keep a valid existing entry or stage and
+  hard-link a fresh identity with `nar_sent = false`, then read back the
+  winner.
 - An entry that does not parse, has another version or names another store
   path is moved, bytes unchanged, to `failed/<hash>.upload.corrupt` (counted
   in `status.failed`, like quarantined records) and replaced as above. The server sees a new identity, which costs at most a
@@ -108,6 +105,16 @@ that wire state per store path, so overlapping closures share it:
   `nar_sent = true` (staged, `fsync`ed, renamed) and returns only after the
   write is durable. The backend calls it before the first NAR byte is sent.
 - `Queue::clear_nar_sent(path, state)` rewrites it with `nar_sent = false`.
+- `Queue::renew_identity(path)` replaces an identity after a declaration
+  answers `unknown_upload`. It generates a fresh `UploadId`. When the path
+  has a valid `pending/<hash>.json` record, rewrite that record first with
+  only its `id` changed, even when the path is being uploaded as a
+  dependency. Then write the `uploads/` entry with the new identity and
+  `nar_sent = false`. Both replacements are staged, synced and renamed
+  durably before returning. After a crash between writes, the next
+  `upload_state` lookup repairs the entry from the record for either role.
+  Before applying a job outcome the worker rereads the pending record and
+  uses its current identity for pending, failed and done records.
 - `Queue::complete_path(path, id, now)` records a dependency as uploaded: it
   writes `done/<hash>.json` with that identity (if absent), then removes the
   `uploads/` entry. A crash between the two leaves an entry that the next
@@ -152,20 +159,25 @@ that loop while it runs. `stockhouse post-build-hook --queue <dir>`:
 
 ## Uploader
 
-`Uploader::upload(&UploadJob { id, store_path, attempts }) -> UploadOutcome`:
+`Uploader::upload(&UploadJob { id, store_path, attempts }) -> UploadOutcome`.
+
+When applying an outcome, first check the current ledger. A later group
+may have already completed the job's path as a dependency. If so, keep the
+done record and remove the pending record. Otherwise apply the following
+effects to the current record:
 
 | Outcome | Effect on the record |
 | --- | --- |
-| `Uploaded` | write `done/<hash>.json` with the same `id`, then remove the pending record |
+| `Uploaded` | write `done/<hash>.json` with the current pending `id`, then remove the pending record |
 | `Retry(Transient \| Uncertain, msg)` | `attempts += 1`; `next_attempt_at = now + min(base·2^(attempts−1), max)`; `last_error = msg` |
 | `Retry(QuotaExceeded, msg)` | as above but `next_attempt_at = now + max` |
 | `Deferred(msg)` | `attempts` unchanged; `next_attempt_at = now + max` |
 | `Rejected(msg)` | move the record to `failed/` |
 
 When a `Retry` brings `attempts` to `max_attempts` the record moves to
-`failed/`. The identity never changes across retries, uncertain replies,
-quota exhaustion and restarts, so a server can treat it as an idempotency
-key. There is no jitter, because each client retries its own queue serially.
+`failed/`. An identity survives retries, uncertain replies, quota
+exhaustion and restarts. It changes when a declaration reports that the
+server forgot it, as described under Upload identities. There is no jitter, because each client retries its own queue serially.
 
 Each pass:
 
@@ -176,8 +188,17 @@ Each pass:
    moves, bytes unchanged, to `failed/<hash>.corrupt` (reason `corrupt`). Its
    identity is unreadable, so a later enqueue of that path starts afresh.
 2. Rescans if needed (below).
-3. Uploads at most `batch_size` due records (`next_attempt_at <= now`) in
-   `(next_attempt_at, id)` order, one at a time.
+3. Hands at most `batch_size` due records (`next_attempt_at <= now`), in
+   `(next_attempt_at, id)` order, to `Uploader::upload_batch` as one slice of
+   jobs, and applies the returned outcomes (one per job, in job order) to the
+   records in that order.
+
+`Uploader::upload_batch(&[UploadJob]) -> Vec<UploadOutcome>` has a default
+implementation that calls `upload` for each job in order and returns all
+outcomes to the worker when the call ends. The `deferred` and `nix-copy`
+backends and the server backend's protocol v1 path use this implementation.
+The server backend's protocol v2 path uploads the jobs' closures together
+(see Protocol v2 groups). The queue format stays at version 1.
 
 The uploader process then sleeps for `poll_interval_secs` and repeats. A
 failing backend only delays records; it never touches the build.
@@ -193,8 +214,8 @@ failing backend only delays records; it never touches the build.
   where `destination` must be an absolute `file://` URL. Exit status 0 is
   `Uploaded`; anything else is `Retry(Transient)` with at most 512 bytes of
   stderr. It passes no credential and contacts no server.
-- `server`: authenticated upload to the private tier with protocol v1
-  (below). It lives in the `stockhouse-upload` crate behind the same
+- `server`: authenticated upload to the private tier with protocol v1 or
+  v2 (below), selected by the `protocol` setting. It lives in the `stockhouse-upload` crate behind the same
   `Uploader` trait.
 
 ## Server backend
@@ -205,7 +226,8 @@ It is built from the validated `ServerEndpoint`, the `nix` executable, the
 opened `Queue` (for upload identities and the ledger) and a
 `CredentialSource`. It never touches the build: like every backend it runs
 only inside the uploader process, and its worst outcome delays a record. The
-server backend and the lease client live in the `stockhouse-upload` crate.
+server backend lives in `stockhouse-upload`, and the lease client lives in
+`stockhouse-lease`. They share the upload crate's server endpoint.
 
 ### Endpoint and credential
 
@@ -313,7 +335,7 @@ there is no recursion. A dependency (any path other than `R`) whose ledger
 entry exists is skipped without a request: that is path-level
 deduplication. `R` itself is never skipped, because the worker only hands
 out records that are not in the ledger. For each other path `P` the backend
-gets `Queue::upload_state(P, root_id)` and runs the steps below. The job
+gets `Queue::upload_state(P)` and runs the steps below. The job
 stops at the first path whose result is not "complete" and returns that
 result. When the worklist is empty it returns `Uploaded`, and the worker
 writes the record's own ledger entry as before. Completing a dependency
@@ -329,7 +351,9 @@ so the budget is a backstop against a misbehaving server and is not reached
 in production. Two
 transitions are allowed at most once per path per job: the missing-reference
 round, and declaring again after `unknown_upload`. A second occurrence of
-either in the same job is `Retry(Transient)`.
+either in the same job is `Retry(Transient)`. Renewing an identity after a
+declaration answered `unknown_upload` (below) is a third such transition,
+also at most once per path per job.
 
 Declare (`POST uploads/<id>`, `Content-Type: application/json`, body
 `UploadDeclaration` from the path-info entry: `store_path`, canonical
@@ -342,6 +366,7 @@ self-reference, `deriver` as a basename, `ca`):
 | `Open` | `mark_nar_sent`, read the credential, then send the NAR |
 | `MissingReferences(m)` | the missing-reference round (below) |
 | `Conflict`, `TooLarge`, `BadRequest`, `VerificationFailed` | `Rejected("<path>: <code>")` |
+| `UnknownUpload` | the server forgot the identity: `Queue::renew_identity`, then declare again with the new identity (once per path per job; a second is `Retry(Transient)`) |
 | `QuotaExceeded` | `Retry(QuotaExceeded)` |
 | `Unauthorized` | the 401 rule above |
 | `Unavailable`, a transport error, a timeout, `ReplyError` | `Retry(Transient)` |
@@ -396,11 +421,342 @@ worklist, with `M` in upload order. `M` is then uploaded with the same steps
 and may itself have a round. The round uses no attempt of the record and
 runs at most once per path per job.
 
+## Server backend, protocol v2
+
+With protocol v2 (see
+[the protocol design](../../PROTO/design/proto.md#upload-and-lease-protocol-v2))
+the server backend uploads the closures of several due records together and
+replaces per-path requests by batches. Everything in "Server backend" above
+still applies unless this section says otherwise: the endpoint, credential
+and 401 rules, the closure query and its errors, the upload order, path-level
+deduplication through the ledger, the `uploads/` identities and `nar_sent`
+marks, the verified NAR stream with its child reaping and timeouts, the
+outcome messages, and the rule that a NAR is never sent again without asking
+the server first.
+
+### Version selection
+
+The backend's `protocol` setting is `auto` (default), `v1` or `v2`.
+
+- `v1`: the backend never sends the probe and behaves exactly as above.
+- `auto` and `v2`: before each `upload_batch` call the backend sends the
+  protocol probe unless it holds a selected version younger than
+  `PROBE_TTL_SECS = 3600`, and selects the version with `select_version`. The
+  selection lives only in the uploader process, so the cache saves probes
+  only for a long-running uploader (the module's service); a short-lived
+  `stockhouse uploader` run probes once.
+- A probe answered `Busy`, `Unavailable`, a transport error, a timeout or a
+  `ReplyError` selects nothing: every job of the call is
+  `Retry(Transient, "protocol probe: <reason>")` and no upload request is
+  sent. The backend never falls back to v1 because a probe failed.
+- `NoCommonVersion` (`auto`) is `Retry(Transient, "no common protocol
+  version")` and `NotOffered` (`v2`) is
+  `Retry(Transient, "server does not offer protocol v2")` for every job.
+- A probe answered `Unauthorized` follows the 401 rule: after a successful
+  `invalidate` the probe is sent once more with the new credential;
+  otherwise, or if that is also `Unauthorized`, every job of the call is
+  `Retry(Transient, "unauthorized")` and no upload request is sent. A
+  credential error defers every job as usual.
+- When any v2 request is answered `NotSupported`, the backend drops the
+  selected version and starts no further v2 request in the call. Transfers
+  already running finish and their results are recorded. A credential stop
+  may abort them. Incomplete paths keep their `nar_sent` marks so a later
+  job can reconcile them. The active group's jobs follow the precedence
+  below. Later jobs that have yet to start all return
+  `Retry(Transient, "<path>: protocol v2 not available")` without contact.
+  The backend probes again before the next `upload_batch` call.
+
+With version 1 selected, `upload_batch` uses the default one-job-at-a-time
+behavior, so `auto` against a v1 server behaves exactly like `v1` after one
+probe per hour.
+
+### Groups
+
+`upload_batch(jobs)` processes the jobs as groups, in job order:
+
+1. After successful negotiation, a job whose root fails `lstat` with
+   `ENOENT` is `Rejected("not in the local store")` without an upload
+   request. A job whose closure cannot be queried or parsed is
+   `Retry(Transient)` with the closure error. Neither stops the other
+   jobs. A closure over `max_closure_paths` is `Rejected("closure too
+   large")` as in v1.
+2. Jobs are added to the current group while the union of their closures
+   holds at most `max_closure_paths` paths; the next job starts a new group.
+   A group is uploaded completely before the next starts.
+3. The group's work set is the union in upload order (a topological order of
+   the union's reference graph, references first, ties by store path
+   bytewise), each path once. At the start of each group, check the current
+   ledger for every path after applying any outstanding reference
+   invalidations to the group's graph. A root completed as a dependency
+   can be reused from the ledger, along with the other paths of its
+   closure. Read the remaining paths' wire state with
+   `Queue::upload_state(path)`, which uses the current pending record even
+   when a root's `UploadJob` still carries an identity renewed earlier.
+
+The group then runs at most three rounds of the four phases below. Within
+a group every path either becomes complete, ends with a result (rejected,
+quota, uncertain, transient or deferred, as the tables below say), is
+reworked, or is held back (ready to publish, waiting for a reference). The
+next round has two parts:
+
+- **Reworked paths**: a NAR or publish `unknown_upload` (declared again, with
+  `nar_sent` cleared), a declare `unknown_upload` (declared again under a
+  fresh identity from `Queue::renew_identity`), a publish `open` (NAR sent again, without a status
+  query: the server has just reported its state), and the paths named in a
+  missing-reference round (reconciled if their `nar_sent` is true, else
+  declared). Reworked paths run the phases that apply to them.
+- **Carried paths**: a held-back path joins the next round when any of its
+  references that is not complete is reworked or is itself carried into the
+  next round, decided in upload order so a chain of held paths is carried
+  together. Carried paths keep `nar_sent` and go straight to the publish
+  phase; they are never queried with `v2/status` and never declared or sent
+  again.
+
+A held-back path that is not carried ends as below ("waiting for a
+reference"). A path is reworked at most once per group; a path needing a
+second rework, or any rework after the third round, ends as
+`Retry(Transient, "<path>: upload round limit")`.
+
+### Phases
+
+1. **Reconcile.** In the first round, paths of the work set whose entry has
+   `nar_sent = true`; in later rounds, only paths reworked by a
+   missing-reference round whose entry has `nar_sent = true`. They are
+   queried with `POST v2/status` in id batches of up to 1000, before any
+   declare or NAR request for them. Carried paths and paths reworked for
+   `unknown_upload` or a publish `open` are never queried, so a path is in
+   at most two status entries per group:
+
+   | Result | Effect |
+   | --- | --- |
+   | `present`, `published` | server-confirmed |
+   | `verified` | ready to publish; no NAR is sent |
+   | `open` | send the NAR (phase 3) |
+   | `unknown_upload` | `clear_nar_sent`, then declare (phase 2) |
+   | `verification_failed` | the path is rejected (`<path>: verification_failed`) |
+
+2. **Declare.** The remaining paths are declared with `POST v2/declare` in
+   upload order, in batches filled until `DeclareBatch::push` returns
+   `DeclarePushError::BatchFull` (1000 entries or 8 MiB). Each entry is built
+   from the path-info facts exactly as a v1 declaration. Only nonempty
+   batches with distinct IDs and paths are sent:
+
+   | Result | Effect |
+   | --- | --- |
+   | `present`, `published` | server-confirmed |
+   | `verified` | durably set `nar_sent` if it was clear, then ready to publish |
+   | `open` | `mark_nar_sent`, durable before its NAR's first byte, then send the NAR |
+   | `conflict`, `too_large`, `verification_failed` | the path is rejected (`<path>: <code>`) |
+   | `unknown_upload` | the server forgot the identity: `Queue::renew_identity`, and the path is reworked, declared in the next round with the new identity; no NAR is sent under the old identity. Once per path per group; a second ends as `Retry(Transient)`. |
+   | `quota_exceeded` | the path ends as quota |
+
+3. **Transfer.** Paths to send are transferred with `PUT v2/nar/<id>`, at
+   most `max_inflight_nars` at a time. The client dispatches transfer work
+   in upload order. Threads and network requests may run in a different
+   order. Each worker uses the v1 stream: credential read just before the request,
+   `Content-Length` = `nar_size`, the final chunk held back until size, hash
+   and dump status verify, child killed and reaped on every early exit, and
+   the v1 NAR timeout. The other transfers continue when one fails.
+
+   | Result | Effect |
+   | --- | --- |
+   | `verified` | ready to publish |
+   | `present`, `published` | server-confirmed |
+   | `VerificationFailed`, `Conflict`, `TooLarge`, `BadRequest` | the path is rejected (`<path>: <code>`) |
+   | `QuotaExceeded` | the path ends as quota |
+   | `UnknownUpload` | `clear_nar_sent`; reworked in the next round (declared again) |
+   | `Busy`, `Unavailable`, a transport error or timeout before the body was fully sent | the path ends as transient |
+   | no reply, a transport error, a timeout or a `ReplyError` after the body was fully sent | the path ends as uncertain; `nar_sent` stays true |
+   | a local NAR that does not match its NarHash | the path is rejected (`<path>: local NAR does not match its NarHash`) |
+
+   A NAR transfer is not resent within the group except after the rework
+   for `unknown_upload` or a publish `open` result, so each path has at most
+   two NAR transfers per group.
+
+4. **Publish.** A path is publishable when it is ready to publish and each
+   of its references other than itself is complete or publishable and
+   earlier in upload order. Publishable paths are published with
+   `POST v2/publish` in upload order, in id batches of up to 1000, sent one
+   after another, so every reference is published by an earlier batch or
+   earlier in the same batch. Publishability is evaluated again before each
+   publish batch, from the results of the batches before it. Paths that are
+   not publishable (a reference ended with a result, is reworked or is held
+   back) are not sent; they are held back.
+
+   | Result | Effect |
+   | --- | --- |
+   | `published`, `present` | server-confirmed |
+   | `open` | the server holds no verified NAR: reworked (NAR sent again) |
+   | `unknown_upload` | `clear_nar_sent`; reworked (declared again) |
+   | `missing_references` | classified per name (below): held back, the missing-reference round, or a protocol violation |
+   | `conflict`, `verification_failed` | the path is rejected (`<path>: <code>`) |
+   | `quota_exceeded` | the path ends as quota |
+
+   A publish request whose reply is lost (a transport error or timeout after
+   the request was sent, or `Busy`/`Unavailable`) is resent identically under
+   the batch resend rule below; if it still has no reply its paths end as
+   uncertain with `nar_sent` kept. The next job queries `v2/status`
+   before taking any further action for those paths. It completes
+   `published` or `present` paths under the completion rule and republishes
+   `verified` paths without resending NARs. A new transfer follows the ordinary status rules only
+   if the server reports an open or unknown upload.
+
+For a publish result `missing_references`, validate every name against
+rules 1 and 2 before changing the work set, path states or ledger for that
+entry. Then classify the valid names under rules 3 and 4:
+
+1. Every name must be one of that entry's declared references other than
+   itself, whatever rule below applies; otherwise the entry's path ends as
+   `Retry(Transient, "protocol violation")`.
+2. A name that is an entry of the same publish request whose result was
+   `published` or `present` contradicts that result: the entry's path ends
+   as `Retry(Transient, "protocol violation")`.
+3. A name that is a path of the group not complete at this point (an entry
+   of the same request that did not end `published` or `present`, or a group
+   path that ended, is reworked, is held back or was not yet published) is
+   held back: the server reports, as the protocol requires, that a
+   reference was not published. The referrer keeps `nar_sent`, is not
+   reworked by this result, and its `done/` entry and those of the named
+   paths are left alone; it is carried into the next round under the rule
+   above or ends as below.
+4. Any other name (a ledgered dependency outside the work set, or a path
+   that became complete through an earlier request of the group) enters the
+   missing-reference round (below).
+
+When the names fall under both rules 3 and 4, only the rule 4 names enter
+the missing-reference round, and the referrer is reworked by that round.
+
+A path still ready to publish when the group ends (because a reference
+ended with a result) ends as `Retry(Transient, "<path>: waiting for a
+reference")`. Its `nar_sent` stays true, so the next job reconciles with
+`v2/status` and reuses a NAR the server still holds.
+
+A server confirmation of `present` or `published` establishes that the
+server holds that path. A path becomes complete when it is server-confirmed
+and all of its non-self references are complete or ledgered. Propagate this
+in upload order after replies and before selecting the next publish batch.
+For every newly complete path, including a root, call `Queue::complete_path`
+with its current upload identity. This writes the ledger before clearing
+the upload entry. A confirmed path whose references are still incomplete
+keeps its upload entry and sends no further request for itself in the group,
+unless the missing-reference round invalidates its confirmation. The
+ledger then provides evidence that the path's closure was complete at the
+time of recording. The worker removes the root's pending record when it
+applies the outcome.
+
+Missing-reference round: for each name `M` under rule 4, invalidate its
+ledger entry and those of transitive referrers known from the closures in
+this call. Remove referrer records before their references, in reverse
+upload order, so a crash cannot leave a known referrer's done record
+after its reference's removal. In the active group, invalidate `M`'s
+confirmation. Affected referrers retain their path confirmations but are
+incomplete until their references recover. Add `M` to the next round for
+status or declare, and rework the requesting entry within its round and
+path limits.
+
+Keep the reference edges of closures seen in the call for this
+invalidation. Apply any still-unrepaired missing-path invalidations to
+newly known referrers when a later group loads its closure graph, before
+using the ledger. Before returning outcomes, check that the root of each
+`Uploaded` job still has its done record. If a later group removed the
+record and it has not been restored, return
+`Retry(Transient, "<path>: waiting for a reference")` instead.
+
+A quota refusal ends only the refused path for the group. The server may
+have enough quota for smaller paths even when it cannot admit a larger
+one. Continue declaring, transferring and publishing unaffected paths,
+including eligible rework in later rounds. A path whose reference is
+quota-refused cannot publish. A verified referrer is held back with
+`nar_sent` kept under the usual reference rule. Jobs whose closures
+include the refused path use the normal outcome precedence and quota
+backoff.
+
+Declare and NAR admission use published quota independently of the server's
+retained verified bytes (see the protocol design). This lets a dependency
+transfer proceed after a referrer's NAR has verified out of order even when
+other verified uploads are waiting to publish.
+
+Batch resend rule: a `v2/status`, `v2/declare` or `v2/publish` request
+answered `Busy`, `Unavailable`, a transport error or a timeout is resent
+identically at most twice, waiting `min(retry_after, 30)` seconds or, without
+`retry_after`, 2 and then 4 seconds. If the third attempt also fails, its
+entries end as transient (status and declare) or uncertain (publish), and
+the group continues with the paths that do not depend on them. Requests are
+never overlapped: a resend starts only after the previous attempt ended, and
+status, declare and publish batches are sent one at a time, so no two
+requests carrying the same entry are ever in flight together. A request
+answered `Refused(BadRequest)` rejects its entries' paths
+(`<path>: POST v2 <request>: bad_request`); `Refused(TooLarge)` and a
+`ReplyError` end them as transient (`protocol violation` or the reply
+error). A conforming server never answers 413 to a request within the
+protocol's limits, so the client never shrinks a batch; a server that does
+keeps the records retrying until they fail by `max_attempts`. Every v2 request follows the 401 rule; concurrent transfers share
+one invalidation, so a burst of 401s calls `CredentialSource::invalidate` at
+most once per credential and each request is retried at most once.
+
+A credential error at any read stops the group at once: no further request
+is sent, running transfers finish or are aborted with their children
+reaped. Record completed and definitive rejection results, including
+results from transfers that finish during the stop. A job with a rejected
+closure path is `Rejected`. Every other incomplete job is
+`Deferred("credential unavailable: <error>")`. Existing `nar_sent` marks
+for incomplete paths are kept.
+
+Requests are bounded structurally: per group each path is in at most two
+status entries, two declare entries, two NAR transfers and three publish
+entries, besides identical resends and the single retry after a successful
+invalidate.
+
+### Job outcomes
+
+Each job's outcome is computed from the paths of its own closure:
+
+1. `Uploaded` when every path of its closure is complete (or was already in
+   the ledger).
+2. `Rejected` when a closure path was definitively rejected, naming the
+   first rejected path in upload order, including during a credential stop.
+3. `Deferred("credential unavailable: <error>")` for remaining incomplete
+   jobs if a credential error stopped the group.
+4. `Retry(Transient, "<path>: protocol v2 not available")` if a
+   `NotSupported` reply stopped the call.
+5. Otherwise the first of `Retry(QuotaExceeded)`, `Retry(Uncertain)` and
+   `Retry(Transient)` among the closure paths. The message names the path
+   and request, for example `<path>: POST v2 publish: quota_exceeded`.
+
+A job whose closure shares a path with a failed job therefore fails with it,
+while a job whose closure is complete is `Uploaded` even when other jobs of
+the group failed. Groups of one call run one after another and are not
+pipelined (one group's transfers do not overlap the next group's declares).
+
+## Lease renewal, protocol v2
+
+The lease client has the same `protocol` setting. After checking its
+machine identity and reading a usable credential, it resolves the slots.
+When every slot is skipped it succeeds without sending a probe or a
+renewal. Otherwise, in `auto` and `v2` it sends the protocol probe once
+per run. Probe failures (`Busy`,
+`Unavailable`, a transport error, a timeout, a `ReplyError`,
+`NoCommonVersion`, and `NotOffered` in `v2`) make every slot failed without
+a renewal, exit 75. A probe answered `Unauthorized` follows the 401 rule
+(one resend after a successful `invalidate`); if it is still unauthorized,
+every slot is failed, exit 75. With version 2 it renews
+every resolved slot in one `POST v2/leases` request of `(machine, slot,
+store_path)` entries in slot order and maps each result as the v1 slot
+table: `Renewed` renewed; `Refused(UnknownPath | Conflict)` refused, logged
+with the code; `MachinesFull` failed. A request-level `Refused(BadRequest)`
+makes every slot refused. `Busy`, `Unavailable`, a transport error or a
+timeout follow the batch resend rule (two identical resends), then every
+slot is failed. A `NotSupported` reply in `auto` makes the same run renew
+each slot with v1 `PUT leases/<machine>/<slot>` instead; leases are few, so
+falling back within the run costs little. In `v2` a `NotSupported` reply
+makes every slot failed, exit 75, with no v1 request. Exit statuses are
+unchanged.
+
 ## Lease renewal
 
 `stockhouse lease --config <file>` renews the server's named roots for this
 machine so the server keeps the system closures it needs. It lives in the
-`stockhouse-upload` crate and uses the same `ServerEndpoint` rules
+`stockhouse-lease` crate and uses the same `ServerEndpoint` rules
 (including the audience check), HTTP client, per-request timeout and 401
 rule as the server backend. Any credential error makes every slot failed
 without a request, and the run exits 75.
@@ -434,7 +790,7 @@ printed or logged.
 
 A slot whose path does not resolve, or resolves to something that is not a
 store path, is skipped with one log line; slot 2 is skipped silently when
-there is no other generation. Each remaining slot is one
+there is no other generation. Under protocol v1 each remaining slot is one
 `PUT leases/<machine-id>/<slot>` with `LeaseRequest { store_path }`:
 
 | Reply | Slot result |
@@ -444,8 +800,8 @@ there is no other generation. Each remaining slot is one
 | `Unauthorized` | the 401 rule; otherwise failed |
 | `Unavailable` (including a server whose machine table is full), a transport error, a timeout, `ReplyError` | failed |
 
-Slots are renewed in order and a failed slot does not stop later slots. A
-run keeps no state besides the machine identity, so it is idempotent and
+With protocol v1, slots are renewed in order even if an earlier slot
+fails. A run keeps no state besides the machine identity, so it is idempotent and
 safe to repeat: the next trigger simply renews again.
 
 Exit status: 0 when every slot was renewed or skipped; 75 (`EX_TEMPFAIL`)
@@ -534,6 +890,8 @@ base_url = "https://cache.example.invalid/t/1/"
 nix = "/run/current-system/sw/bin/nix"     # optional, default "nix"
 request_timeout_secs = 60                  # optional, default 60
 max_closure_paths = 50000                  # optional, default 50000
+protocol = "auto"                          # optional: "auto", "v1" or "v2"
+max_inflight_nars = 4                      # optional, 1–16, default 4
 
 [backend.credential]
 systemd = "private"                        # or file = "/abs/path", or
@@ -543,8 +901,12 @@ systemd = "private"                        # or file = "/abs/path", or
 `UploaderConfig::parse` checks its structure (unknown fields are `Parse`; a
 missing `credential` is `Parse`; `credential` is the shared
 `CredentialSpec`), that `request_timeout_secs` is within 1–300 like the
-sign-in configuration's, and that `max_closure_paths` is not zero
-(`InvalidLimit`). The base URL is checked by
+sign-in configuration's, that `max_closure_paths` is not zero, and that
+`max_inflight_nars` is within 1–16 (`InvalidLimit`). A `protocol` other than
+`auto`, `v1` or `v2` is `Parse`. The new keys are optional, so configuration
+version 1 is unchanged. `max_inflight_nars` is used only with protocol v2;
+four concurrent transfers let the server merge their commits without letting
+one machine monopolize its upload capacity. The base URL is checked by
 `ServerEndpoint::new` when the CLI builds the backend, and a failure there is
 also a configuration error (exit 2), as is a credential source that
 cannot be built or whose private tier differs from `base_url`.
@@ -558,6 +920,7 @@ machine_id_file = "/var/lib/stockhouse/machine-id"
 current_system = "/run/current-system"            # optional, this default
 system_profile = "/nix/var/nix/profiles/system"   # optional, this default
 request_timeout_secs = 60                         # optional, default 60
+protocol = "auto"                                 # optional: "auto", "v1" or "v2"
 
 [credential]
 systemd = "private"                               # or file, or server
@@ -570,5 +933,6 @@ path = "/nix/var/nix/profiles/per-user/root/profile"
 Errors (`LeaseConfigError`): `Parse` (syntax, unknown or missing field),
 `UnsupportedVersion`, `RelativePath { field }` (`machine_id_file`,
 `current_system`, `system_profile` or an `extra` path not absolute),
-`InvalidSlot` (an `extra` slot outside 3–10 or repeated), `InvalidLimit`
+`InvalidSlot` (an `extra` slot outside 3–10 or repeated), a `protocol`
+other than `auto`, `v1` or `v2` (`Parse`), `InvalidLimit`
 (a timeout outside 1–300 seconds) and `Endpoint(EndpointError)`.

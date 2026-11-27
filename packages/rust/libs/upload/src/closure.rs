@@ -51,6 +51,22 @@ pub struct ClosureEntry {
     pub ca: Option<String>,
 }
 
+impl ClosureEntry {
+    /// Builds the declaration used by either wire version.
+    pub fn declaration(
+        &self,
+    ) -> Result<stockhouse_wire::UploadDeclaration, stockhouse_wire::DeclarationError> {
+        stockhouse_wire::UploadDeclaration::new(
+            self.path.clone(),
+            self.nar_hash,
+            self.nar_size,
+            self.references.clone(),
+            self.deriver.clone(),
+            self.ca.clone(),
+        )
+    }
+}
+
 /// Runs `nix path-info --json --recursive <root>` and returns stdout. A
 /// command that produces nothing for `idle` is killed and reaped.
 pub fn query(nix: &Path, root: &StorePath, idle: Duration) -> Result<Vec<u8>, ClosureError> {

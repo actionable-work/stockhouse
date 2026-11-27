@@ -1,0 +1,78 @@
+group = "NEGOTIATE"
+
+[[requirements]]
+id = "CLIENT-PROTO-NEGOTIATE-001"
+title = "The protocol probe has a fixed path"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "the protocol probe path is rendered"
+system = "probe path renderer"
+action = "return `protocol`"
+
+[[requirements]]
+id = "CLIENT-PROTO-NEGOTIATE-002"
+title = "Offered version lists parse strictly"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a 200 reply to the protocol probe is classified"
+system = "probe reply classifier"
+action = "return `Offered` with the versions for an object holding `versions` as 1 to 16 distinct ascending integers from 1 to 65535, ignoring any other key, and `ReplyError::Unexpected` with status 200 for a body that is not an object or lacks a valid `versions`"
+
+[[requirements]]
+id = "CLIENT-PROTO-NEGOTIATE-003"
+title = "A server without the probe offers only v1"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "the protocol probe is answered 404 with any body, including non-JSON"
+system = "probe reply classifier"
+action = "return `Offered([1])` without reading the body"
+
+[[requirements]]
+id = "CLIENT-PROTO-NEGOTIATE-004"
+title = "Probe failures classify without reading the body"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "the protocol probe is answered 401, 429 or 503 with any body"
+system = "probe reply classifier"
+action = "return `Unauthorized`, `Busy` or `Unavailable` respectively, carrying the parsed `Retry-After` for 429 and 503"
+
+[[requirements]]
+id = "CLIENT-PROTO-NEGOTIATE-005"
+title = "Other probe replies are unexpected or too large"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "the protocol probe is answered with any other status or with a body over 4 KiB"
+system = "probe reply classifier"
+action = "return `ReplyError::Unexpected` with the status, or `ReplyError::TooLarge` for the oversized body"
+
+[[requirements]]
+id = "CLIENT-PROTO-NEGOTIATE-006"
+title = "The protocol mode selects the wire version"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "a wire version is selected for a protocol mode and an offered version list"
+system = "`select_version`"
+action = "return 1 for mode `v1`; for `auto`, 2 when 2 is offered, else 1 when 1 is offered, else `VersionError::NoCommonVersion`; for `v2`, 2 when offered, else `VersionError::NotOffered`"
+
+[[requirements]]
+id = "CLIENT-PROTO-NEGOTIATE-007"
+title = "Wire versions are separate from client format versions"
+manual = false
+design = "design/proto.md"
+[requirements.ears]
+type = "event"
+trigger = "the supported wire versions are read"
+system = "`stockhouse-wire-v2`"
+action = "expose `WIRE_VERSIONS = [1, 2]` while `PROTOCOL_VERSION` stays 1, and render `version` 2 in every v2 request body"

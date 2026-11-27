@@ -214,6 +214,8 @@
   serverBackend = {
     kind = "server";
     base_url = privateTier.url;
+    protocol = cfg.uploader.protocol;
+    max_inflight_nars = cfg.uploader.maxInflightNars;
     inherit nix;
     credential = privateCredential.toml;
   };
@@ -222,6 +224,7 @@
     version = 1;
     base_url = privateTier.url;
     machine_id_file = machineIdFile;
+    protocol = cfg.uploader.protocol;
     credential = privateCredential.toml;
     extra = map (e: {inherit (e) slot path;}) cfg.lease.extraSlots;
   };
@@ -432,7 +435,17 @@ in {
       backend = mkOption {
         type = types.enum ["deferred" "nix-copy" "server"];
         default = "deferred";
-        description = "`deferred` keeps records pending; `nix-copy` copies to a local file:// cache for development and tests; `server` uploads each built closure to the private tier (`proxy.private`) with protocol v1.";
+        description = "`deferred` keeps records pending; `nix-copy` copies to a local file:// cache for development and tests; `server` uploads each built closure to the private tier (`proxy.private`) with protocol v1 or v2.";
+      };
+      protocol = mkOption {
+        type = types.enum ["auto" "v1" "v2"];
+        default = "auto";
+        description = "Wire protocol for server uploads and lease renewal. Auto selects the highest version offered by the server.";
+      };
+      maxInflightNars = mkOption {
+        type = types.int;
+        default = 4;
+        description = "Maximum concurrent NAR uploads with protocol v2 (1–16).";
       };
       backoffBase = mkOption {
         type = types.ints.positive;
@@ -602,6 +615,10 @@ in {
           message = "services.stockhouse.uploader.backend = \"server\" needs services.stockhouse.proxy.private with an https:// (or loopback-IP http://) URL ending in /, and services.stockhouse.auth.enable or a private credentialFile.";
         }
         {
+          assertion = !isServer || (cfg.uploader.maxInflightNars >= 1 && cfg.uploader.maxInflightNars <= 16);
+          message = "services.stockhouse.uploader.maxInflightNars must be between 1 and 16.";
+        }
+        {
           assertion = cfg.uploader.backoffBase <= cfg.uploader.backoffMax;
           message = "services.stockhouse.uploader.backoffBase must not exceed backoffMax.";
         }
@@ -653,14 +670,25 @@ in {
       };
 
       systemd.timers.stockhouse-lease = {
-        description = "Stockhouse lease renewal on boot, hourly and daily";
+        description = "Stockhouse lease renewal on boot and hourly";
         wantedBy = ["timers.target"];
         timerConfig = {
           OnBootSec = "1min";
           OnUnitActiveSec = "1h";
+          RandomizedDelaySec = toString cfg.lease.randomizedDelaySec;
+        };
+      };
+
+      # An existing calendar stamp can suppress an overdue OnBootSec trigger
+      # when the schedules share a persistent timer.
+      systemd.timers.stockhouse-lease-daily = {
+        description = "Stockhouse daily lease renewal";
+        wantedBy = ["timers.target"];
+        timerConfig = {
           OnCalendar = "daily";
           Persistent = true;
           RandomizedDelaySec = toString cfg.lease.randomizedDelaySec;
+          Unit = "stockhouse-lease.service";
         };
       };
 

@@ -23,7 +23,7 @@ fn environment_proxies_never_receive_requests() {
     }
     let mut store = Store::new();
     let root = store.add("root", &[]);
-    let server = FakeServer::protocol(Arc::default(), |_| None);
+    let server = Protocol::start(Arc::default(), |_| None);
     let queue = store.queue();
     assert_eq!(
         uploader(&store, &server).upload(&job(&queue, &root)),

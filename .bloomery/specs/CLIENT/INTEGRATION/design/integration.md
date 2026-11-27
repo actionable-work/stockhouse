@@ -123,6 +123,13 @@ in `/`; and
 derives its private tier from `proxy.private.url`, so the audience check of
 the uploader and lease client passes by construction.
 
+`uploader.protocol` (`"auto"`, `"v1"` or `"v2"`, default `"auto"`) is
+written as `protocol` into both the generated server backend and the lease
+configuration, so the uploader and the lease client always speak the same
+protocol family. `uploader.maxInflightNars` (an integer from 1 to 16,
+default 4) is written as the backend's `max_inflight_nars`. Both apply only
+with the `server` backend; the module asserts the range.
+
 The uploader and lease units share one hardening set: `ProtectSystem =
 strict`, `ProtectHome`, `PrivateTmp`, `NoNewPrivileges` and
 `RestrictAddressFamilies = AF_INET AF_INET6 AF_UNIX`, with writes limited to
@@ -142,11 +149,14 @@ With `lease.enable`:
   `lease.extraSlots` entry. The service has no `wantedBy` and nothing
   requires or orders itself after it, so it is never part of the boot or
   activation transaction.
-- `stockhouse-lease.timer` (`wantedBy = timers.target`) is the backstop: it
-  starts the service with `OnBootSec = 1min`, `OnUnitActiveSec = 1h`,
-  `OnCalendar = daily`, `Persistent = true` and `RandomizedDelaySec =
-  lease.randomizedDelaySec` (default 600, so a fleet does not renew in the
-  same second).
+- `stockhouse-lease.timer` starts the service at boot and hourly with
+  `OnBootSec = 1min` and `OnUnitActiveSec = 1h`. The separate
+  `stockhouse-lease-daily.timer` handles `OnCalendar = daily` and
+  `Persistent = true`. This keeps the persistent calendar stamp separate
+  from the boot trigger, which must still fire when the timer starts
+  more than a minute after boot. Both timers have
+  `wantedBy = timers.target` and use `lease.randomizedDelaySec` for
+  `RandomizedDelaySec` (default 600).
 - After activation: an activation snippet runs
   `systemctl restart --no-block stockhouse-lease-switch.timer || true`.
   `stockhouse-lease-switch.timer` has no `wantedBy`, `OnActiveSec = 30s` and
@@ -302,8 +312,8 @@ used as both the client and the daemon (`nix.package`):
 
 ## VM qualification
 
-The VM tests are nine stories
-(`tests/vm-{proxy,substitution,durability,lifecycle,signin,refresh,upload,upload-recovery,lease}.test.nix`),
+The VM tests are eleven stories
+(`tests/vm-{proxy,substitution,durability,lifecycle,signin,refresh,upload,upload-recovery,lease,upload-v2,upload-v2-recovery}.test.nix`),
 each run as one NixOS VM test per pinned Nix version on the shared node in
 `tests/lib/vm.nix`. Each story traces at most five requirements. A
 fixture signing key is written in the VM at runtime from a constant public
@@ -377,3 +387,42 @@ released, or close the connection without replying after publishing a
 chosen NAR. It serves `nix-cache-info` and answers 404 to narinfo, so the
 proxy's private tier stays a valid upstream. It is a test fixture, not a
 server implementation, and it claims nothing about a real server.
+
+The fake server speaks protocol v1 and v2 from this repository's specs. Its
+control file `v1-only` makes it answer 404 to the protocol probe and to
+every `v2/` route, so it then behaves exactly as a v1 server. The `upload`,
+`upload-recovery` and `lease` stories create `v1-only` before the client
+starts and keep the default `uploader.protocol = "auto"`, so they qualify v1
+and the fallback from `auto` together. For v2 the fake keeps each upload's
+state (`open`, `verified`, `published`) on disk, implements batch declare,
+NAR verification to `verified`, in-order publish with reference checks
+against held paths and earlier entries, read-only status and batch leases
+with the limits of the protocol, and logs one line per request (method,
+route and entry count) and one line per entry (upload identity, store path
+hash and result). Further control files make it close the connection
+without replying after committing every publish batch while it exists
+(`drop-publish`, so the client's identical resends are dropped too),
+answer 429 with `Retry-After: 1` to the next batch request (`busy-once`),
+and withdraw v2 at runtime (`v1-only` created while the client runs).
+
+### Protocol v2 stories
+
+`tests/vm-upload-v2.test.nix` and `tests/vm-upload-v2-recovery.test.nix` use
+the server-backend node without `v1-only`:
+
+- `upload-v2`: a closure of about twenty new paths built with the uploader
+  stopped uploads, after the uploader starts, with one probe, one declare
+  batch, one NAR transfer per new path, at most `maxInflightNars` of them
+  concurrently (the fake records the peak), and one publish batch, and no
+  v1 request; a path the fake already holds gets no NAR; lease renewal is
+  one `v2/leases` request; creating `v1-only` while the client runs makes
+  the next upload fall back to v1 after a new probe.
+- `upload-v2-recovery`: while `drop-publish` exists every publish reply is
+  lost, so the job ends uncertain after its bounded resends; after the
+  control is removed a later job sees the committed uploads as
+  `published` through `v2/status` and completes without another NAR or
+  publish request. The uploader is stopped while a NAR transfer is stalled
+  and restarted, and the uploads keep their identities
+  and are reconciled with `v2/status` before any NAR is resent; `busy-once`
+  delays the group without consuming a record attempt.
+

@@ -36,6 +36,10 @@ Supported systems are recorded in
 | Per-user sign-in and per-user isolation of private-tier substitution (sign-in is per machine) | later client slice |
 | End-to-end upload and lease evidence against a real server (protocol v1 upload, quota and uncertain-reply reconciliation are implemented and qualified against a local fake server) | that server's own drill |
 | Chunk-level upload deduplication, upload ranges or resume | later client slice |
+| End-to-end protocol v2 evidence against a real server (v2 is specified here and qualified only against this repository's fake server; see `docs/PROTOCOL_V2_SERVER.md`) | that server's v2 implementation and drill |
+| Several small NARs in one request body, and cross-machine or cross-pass batching of uploads | later protocol revision |
+| Pipelining protocol v2 groups (one group's transfers overlapping the next group's declares) | later client slice |
+| A crash loop of the uploader (killed mid-group) consumes no attempt, so a record that crashes it can retry indefinitely; and a server answering 413 to requests within the v2 limits keeps records retrying until `max_attempts` | later client slice |
 | A persistent 401 (or quota exhaustion) consumes upload attempts, so a record can fail permanently after about `maxAttempts × backoffMax`; it could defer instead | later client slice |
 | Server NixOS module integration | private server modules (P2.11) |
 | Agent or keyring credential sources beyond systemd credentials and owner-only files | later client slice |

@@ -26,6 +26,7 @@
       // import ./module-auth.test.nix moduleArgs
       // import ./module-auth-wrapper.test.nix moduleArgs
       // import ./module-upload.test.nix moduleArgs
+      // import ./module-upload-protocol.test.nix moduleArgs
       // import ./module-lease.test.nix moduleArgs
       // import ./vm-proxy.test.nix vmArgs
       // import ./vm-substitution.test.nix vmArgs
@@ -34,6 +35,8 @@
       // import ./vm-upload.test.nix vmArgs
       // import ./vm-upload-recovery.test.nix vmArgs
       // import ./vm-lease.test.nix vmArgs
+      // import ./vm-upload-v2.test.nix vmArgs
+      // import ./vm-upload-v2-recovery.test.nix vmArgs
       // import ./vm-signin.test.nix vmArgs
       // import ./vm-refresh.test.nix vmArgs;
   };

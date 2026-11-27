@@ -65,3 +65,25 @@ type = "event"
 trigger = "a `server` backend has an unknown field, no credential, a `request_timeout_secs` outside 1–300 or a zero `max_closure_paths`"
 system = "uploader configuration parser"
 action = "return `UploaderConfigError::Parse` or `UploaderConfigError::InvalidLimit` naming the field respectively"
+
+[[requirements]]
+id = "CLIENT-INGEST-CONFIG-007"
+title = "The server protocol setting is validated"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a server backend or lease configuration is parsed with or without `protocol`"
+system = "uploader and lease configuration parsers"
+action = "default it to `auto`, accept `auto`, `v1` and `v2`, and return `Parse` for any other value"
+
+[[requirements]]
+id = "CLIENT-INGEST-CONFIG-008"
+title = "Concurrent NAR transfers are bounded"
+manual = false
+design = "design/ingest.md"
+[requirements.ears]
+type = "event"
+trigger = "a server backend configuration is parsed with or without `max_inflight_nars`"
+system = "uploader configuration parser"
+action = "default it to 4, accept 1 to 16, and return `UploaderConfigError::InvalidLimit` naming `max_inflight_nars` otherwise"

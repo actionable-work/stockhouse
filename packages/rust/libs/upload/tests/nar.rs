@@ -20,7 +20,7 @@ fn put(server: &FakeServer) -> Request {
 fn nars_stream_with_the_declared_length() {
     let mut store = Store::new();
     let root = store.add_sized("root", &[], 300_000);
-    let server = FakeServer::protocol(Arc::default(), |_| None);
+    let server = Protocol::start(Arc::default(), |_| None);
     let queue = store.queue();
     assert_eq!(
         uploader(&store, &server).upload(&job(&queue, &root)),
@@ -73,7 +73,7 @@ fn a_nar_that_does_not_match_is_never_sent_complete() {
             _ => nar.extend_from_slice(&[0u8; 10]),
         }
         std::fs::write(store.dir.join("nar").join(root.hash().as_str()), nar).unwrap();
-        let server = FakeServer::protocol(Arc::default(), |_| None);
+        let server = Protocol::start(Arc::default(), |_| None);
         let queue = store.queue();
         let outcome = uploader(&store, &server).upload(&job(&queue, &root));
         assert_eq!(
@@ -97,7 +97,7 @@ fn a_failing_dump_retries_and_its_child_is_reaped() {
     let mut store = Store::new();
     let root = store.add("root", &[]);
     store.set("dump.code", "1");
-    let server = FakeServer::protocol(Arc::default(), |_| None);
+    let server = Protocol::start(Arc::default(), |_| None);
     let queue = store.queue();
     assert_eq!(
         uploader(&store, &server).upload(&job(&queue, &root)),
@@ -145,7 +145,7 @@ fn a_lost_reply_after_the_nar_is_uncertain() {
         let root = store.add("root", &[]);
         let proto = Arc::new(Protocol::default());
         let p3 = proto.clone();
-        let server = FakeServer::protocol(proto, move |req| {
+        let server = Protocol::start(proto, move |req| {
             if req.method != "PUT" {
                 return None;
             }
