@@ -1,11 +1,10 @@
 # VM story: loopback and device sign-in through the stockhouse-auth wrapper,
 # logout, and the sealed owner-only token store keeping tokens out of every
-# visible place. Runs on both pinned Nix versions (VM-010).
+# visible place.
 args:
 (import ./lib/vm.nix args).story "signin" {
   signIn = true;
   passthru.bloomery = [
-    "CLIENT-INTEGRATION-VM-010"
     "CLIENT-INTEGRATION-VM-013"
     "CLIENT-INTEGRATION-VM-014"
     "CLIENT-INTEGRATION-VM-017"

@@ -13,9 +13,9 @@ serde_json = { workspace = true }
 stockhouse-test-support = { workspace = true }
 
 [package]
-name = "stockhouse-upload-v2"
-publish = false
 edition.workspace = true
 license.workspace = true
+name = "stockhouse-upload-v2"
+publish = false
 repository.workspace = true
 version.workspace = true

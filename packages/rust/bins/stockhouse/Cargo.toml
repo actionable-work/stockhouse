@@ -2,9 +2,9 @@
 stockhouse-cli = { workspace = true }
 
 [package]
-name = "stockhouse"
-publish = false
 edition.workspace = true
 license.workspace = true
+name = "stockhouse"
+publish = false
 repository.workspace = true
 version.workspace = true

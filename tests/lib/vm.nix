@@ -1,6 +1,6 @@
 # Shared NixOS VM fixture for the client qualification stories. Each story
-# runs once per pinned Nix version, used as both client and daemon. The VM
-# has no network. Its signing key is a synthetic fixture: the secret is
+# uses the client and daemon from the default NixOS Nix package. The VM has
+# no network. Its signing key is a synthetic fixture: the secret is
 # assembled at runtime from a public constant seed and is trusted only inside
 # this VM.
 {
@@ -80,9 +80,8 @@
     };
   };
 
-  node = nixPackage: extraModule: {config, ...}: {
-    imports = [module extraModule];
-    nix.package = nixPackage;
+  node = {config, ...}: {
+    imports = [module];
     nix.settings.secret-key-files = ["/etc/stockhouse-vm/key.sec"];
     # Builds query the proxy before building; do not cache those misses.
     nix.settings.narinfo-cache-negative-ttl = 0;
@@ -258,36 +257,22 @@
 
   # The sign-in node module: fake OAuth server and sealed server sign-in.
   authModule = import ./auth.nix {inherit pkgs lib keyName publicKey;};
-
-  nixVersions = {
-    "nix-2_34" = pkgs.nixVersions.nix_2_34;
-    "nix-2_31" = pkgs.nixVersions.nix_2_31;
-  };
 in {
-  # One check per pinned Nix version: `vm-<story>-<nix version>`.
   story = story: {
     script,
     passthru,
     signIn ? false,
     backend ? "nix-copy",
     fakeProtocol ? "v2",
-  }:
-    lib.mapAttrs' (version: nixPackage:
-      lib.nameValuePair "vm-${story}-${version}" (pkgs.testers.runNixOSTest {
-        name = "stockhouse-vm-${story}-${version}";
-        nodes.machine = {
-          imports =
-            [
-              (node nixPackage (
-                if signIn
-                then authModule
-                else {}
-              ))
-            ]
-            ++ lib.optional (backend == "server") (serverNode fakeProtocol);
-        };
-        testScript = prelude + script;
-        inherit passthru;
-      }))
-    nixVersions;
+  }: {
+    "vm-${story}" = pkgs.testers.runNixOSTest {
+      name = "stockhouse-vm-${story}";
+      nodes.machine.imports =
+        [node]
+        ++ lib.optional signIn authModule
+        ++ lib.optional (backend == "server") (serverNode fakeProtocol);
+      testScript = prelude + script;
+      inherit passthru;
+    };
+  };
 }

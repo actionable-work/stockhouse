@@ -5,9 +5,9 @@ stockhouse-proto = { workspace = true }
 stockhouse-wire = { workspace = true }
 
 [package]
-name = "stockhouse-wire-v2"
-publish = false
 edition.workspace = true
 license.workspace = true
+name = "stockhouse-wire-v2"
+publish = false
 repository.workspace = true
 version.workspace = true

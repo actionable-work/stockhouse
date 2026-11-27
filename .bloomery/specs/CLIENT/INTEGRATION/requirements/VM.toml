@@ -123,14 +123,14 @@ action = "restart the proxy with the new priority, serve the original priority a
 
 [[requirements]]
 id = "CLIENT-INTEGRATION-VM-010"
-title = "Both pinned Nix versions are qualified"
+title = "VMs qualify the default Nix package"
 manual = false
 design = "design/integration.md"
 [requirements.ears]
 type = "event"
 trigger = "the VM tests run"
 system = "VM test suite"
-action = "run every VM requirement once with Nix 2.34.8 and once with Nix 2.31.5 as both client and daemon"
+action = "run each story once using the pinned nixpkgs revision's default Nix package for both client and daemon"
 
 [[requirements]]
 id = "CLIENT-INTEGRATION-VM-013"

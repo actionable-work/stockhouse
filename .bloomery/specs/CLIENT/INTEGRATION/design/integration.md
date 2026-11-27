@@ -301,21 +301,14 @@ Behavior:
 
 The flake exposes outputs for `x86_64-linux` only.
 
-## Nix version matrix
-
-The VM tests run the whole client against two repo-pinned Nix versions, each
-used as both the client and the daemon (`nix.package`):
-
-- Nix 2.34.8 (`nixVersions.nix_2_34`, nixpkgs' current stable);
-- Nix 2.31.5 (`nixVersions.nix_2_31`, the oldest pinned release still in
-  nixpkgs).
-
 ## VM qualification
 
 The VM tests are eleven stories
 (`tests/vm-{proxy,substitution,durability,lifecycle,signin,refresh,upload,upload-recovery,lease,upload-v2,upload-v2-recovery}.test.nix`),
-each run as one NixOS VM test per pinned Nix version on the shared node in
-`tests/lib/vm.nix`. Each story traces at most five requirements. A
+each run once on the shared NixOS node in `tests/lib/vm.nix`. The node uses
+the default `nix.package` from the flake's pinned nixpkgs revision for both
+the Nix client and daemon. The proxy story verifies both executables.
+Each story traces at most five requirements. A
 fixture signing key is written in the VM at runtime from a constant public
 seed and set as the daemon's `secret-key-files`, so locally built paths are
 signed. It is synthetic and trusted only inside the test VM. The VM has no

@@ -17,9 +17,9 @@ stockhouse-oauth-fake = { workspace = true }
 tokio = { workspace = true }
 
 [package]
-name = "stockhouse-auth"
-publish = false
 edition.workspace = true
 license.workspace = true
+name = "stockhouse-auth"
+publish = false
 repository.workspace = true
 version.workspace = true
