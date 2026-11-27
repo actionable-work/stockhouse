@@ -4,13 +4,11 @@
   inputs = {
     stockhouse.url = "path:..";
     nixpkgs.follows = "stockhouse/nixpkgs";
-    nixpkgs-vm-nix.follows = "stockhouse/nixpkgs-vm-nix";
   };
 
   outputs = {
     stockhouse,
     nixpkgs,
-    nixpkgs-vm-nix,
     ...
   }: let
     system = "x86_64-linux";
@@ -20,7 +18,6 @@
     vmArgs = {
       inherit pkgs;
       module = modules.default;
-      nixVersions = nixpkgs-vm-nix.legacyPackages.${system}.nixVersions;
     };
   in {
     checks.${system} =

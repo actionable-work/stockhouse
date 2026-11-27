@@ -101,7 +101,7 @@ action = "run the configured `nix` with exactly `--extra-experimental-features`,
 
 [[requirements]]
 id = "CLIENT-INGEST-SERVER-010"
-title = "Closures parse from both pinned path-info shapes"
+title = "Closures parse from both path-info JSON shapes"
 manual = false
 design = "design/ingest.md"
 [requirements.ears]

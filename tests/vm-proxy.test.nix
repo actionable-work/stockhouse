@@ -1,6 +1,5 @@
 # VM story: the installed proxy listens on loopback only, keeps its credential
 # out of every visible place, and never falls through on denial or outage.
-# Every VM story runs on both pinned Nix versions (VM-010).
 args:
 (import ./lib/vm.nix args).story "proxy" {
   passthru.bloomery = [
@@ -30,6 +29,14 @@ args:
         assert 'systemd = "shared"' in config, config
         substituters = machine.succeed("nix --extra-experimental-features nix-command config show substituters").strip()
         assert substituters == PROXY, substituters
+
+    with subtest("VM-010 the client and daemon use the default Nix package"):
+        nix_bin = "${args.pkgs.nix.out}/bin"
+        daemon_pid = machine.succeed("systemctl show -p MainPID --value nix-daemon.service").strip()
+        client = machine.succeed('readlink -f "$(command -v nix)"').strip()
+        daemon = machine.succeed(f"readlink -f /proc/{daemon_pid}/exe").strip()
+        assert client == machine.succeed(f"readlink -f {nix_bin}/nix").strip(), client
+        assert daemon == machine.succeed(f"readlink -f {nix_bin}/nix-daemon").strip(), daemon
 
     with subtest("VM-011 denied and unavailable tiers do not fall through"):
         assert http_code(f"/{DENIED_HASH}.narinfo") == "503"

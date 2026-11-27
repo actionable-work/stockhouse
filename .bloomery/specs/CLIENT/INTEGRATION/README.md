@@ -6,7 +6,7 @@ description: |
   The `stockhouse` binary forwards to `stockhouse-cli`, which dispatches the
   proxy, uploader, post-build hook, status, lease and server sign-in commands. The
   flake exports a NixOS client module whose behavior is qualified in NixOS
-  VM tests against two pinned Nix versions.
+  VM tests using the default Nix package from the flake's pinned nixpkgs.
 ---
 
 # Binary, CLI and NixOS Integration

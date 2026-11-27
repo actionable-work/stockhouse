@@ -64,9 +64,8 @@ not part of this release.
 - **Upload is opt-in.** The default uploader backend keeps built paths queued
   until a backend is configured. The `nix-copy` backend copies paths to a
   local `file://` cache and is meant for development and tests.
-- **Supported systems:** `x86_64-linux` NixOS with systemd only, tested in
-  NixOS VMs with Nix 2.34.8 and 2.31.5. Other Linux systems, distributions
-  and operating systems are not claimed.
+- **Supported systems:** `x86_64-linux` NixOS with systemd. The VM suite
+  tests the default Nix package from the flake's pinned nixpkgs.
 - **No releases yet:** nothing is published to crates.io or anywhere else.
 
 See [`docs/`](docs/) for the slice record, including non-claims and deferred

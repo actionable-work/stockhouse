@@ -154,8 +154,8 @@ that loop while it runs. `stockhouse post-build-hook --queue <dir>`:
    an upload.
 5. Exits 0 in every case. The CLI catches panics (`catch_unwind`; release
    builds keep `panic = "unwind"`), and the module's hook script also ends in
-   `|| true`. The Nix version matrix is tested because hook execution
-   semantics differ across Nix releases.
+   `|| true`. The VM suite exercises the hook with the default Nix package
+   from the flake's pinned nixpkgs.
 
 ## Uploader
 
@@ -838,7 +838,7 @@ The `nix-path-info` scanner runs
 `<nix> --extra-experimental-features nix-command path-info --json --all`. It
 reads stdout only, caps it at 256 MiB, and selects paths whose `ultimate` flag
 is true (built locally; a missing flag counts as false), excluding `.drv`
-files. It accepts the two JSON shapes the pinned Nix versions produce:
+files. It accepts two JSON shapes:
 
 - an object keyed by full store path (Nix 2.31 and 2.34 with plain `--json`);
 - `{"info": {<basename>: …}, "version": 2}` (`--json-format 2` on Nix 2.34,

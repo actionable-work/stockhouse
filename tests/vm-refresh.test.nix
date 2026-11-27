@@ -5,7 +5,6 @@ args:
 (import ./lib/vm.nix args).story "refresh" {
   signIn = true;
   passthru.bloomery = [
-    "CLIENT-INTEGRATION-VM-010"
     "CLIENT-INTEGRATION-VM-015"
     "CLIENT-INTEGRATION-VM-016"
     "CLIENT-INTEGRATION-MODULE-026"

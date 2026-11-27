@@ -37,3 +37,6 @@ server follow-up.
   publish replies, restart reconciliation, and `Retry-After`.
 - Independent re-reviews of the implementation and VM fixtures found no
   remaining actionable issues.
+
+The current VM suite runs each story once using the default Nix client and
+daemon from the flake's pinned nixpkgs.

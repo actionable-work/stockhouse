@@ -58,31 +58,11 @@
         "type": "github"
       }
     },
-    "nixpkgs-vm-nix": {
-      "locked": {
-        "lastModified": 1790185690,
-        "narHash": "sha256-xJ+X4hBtOcAFGBOe5nAMyMUeF9foJBmIOu3NjBqBycU=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "4975466d324710c576dc11ad614684e6bd8cad8e",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "4975466d324710c576dc11ad614684e6bd8cad8e",
-        "type": "github"
-      }
-    },
     "root": {
       "inputs": {
         "nixpkgs": [
           "stockhouse",
           "nixpkgs"
-        ],
-        "nixpkgs-vm-nix": [
-          "stockhouse",
-          "nixpkgs-vm-nix"
         ],
         "stockhouse": "stockhouse"
       }
@@ -94,8 +74,7 @@
           "stockhouse",
           "bloomery",
           "nixpkgs"
-        ],
-        "nixpkgs-vm-nix": "nixpkgs-vm-nix"
+        ]
       },
       "locked": {
         "path": "..",

@@ -4,8 +4,6 @@
   inputs = {
     bloomery.url = "github:actionable-work/bloomery";
     nixpkgs.follows = "bloomery/nixpkgs";
-    # Preserve the exact Nix versions required by VM-010.
-    nixpkgs-vm-nix.url = "github:NixOS/nixpkgs/4975466d324710c576dc11ad614684e6bd8cad8e";
   };
 
   outputs = inputs @ {
