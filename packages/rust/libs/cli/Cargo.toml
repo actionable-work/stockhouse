@@ -14,12 +14,11 @@ tokio = { workspace = true }
 [dev-dependencies]
 reqwest = { workspace = true }
 stockhouse-oauth-fake = { workspace = true }
-stockhouse-token-store = { workspace = true }
 
 [package]
-name = "stockhouse-cli"
-publish = false
 edition.workspace = true
 license.workspace = true
+name = "stockhouse-cli"
+publish = false
 repository.workspace = true
 version.workspace = true

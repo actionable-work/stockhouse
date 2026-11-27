@@ -13,9 +13,9 @@ stockhouse-wire-v2 = { workspace = true }
 stockhouse-test-support = { workspace = true }
 
 [package]
-name = "stockhouse-upload"
-publish = false
 edition.workspace = true
 license.workspace = true
+name = "stockhouse-upload"
+publish = false
 repository.workspace = true
 version.workspace = true

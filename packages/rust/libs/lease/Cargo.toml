@@ -14,9 +14,9 @@ toml = { workspace = true }
 stockhouse-test-support = { workspace = true }
 
 [package]
-name = "stockhouse-lease"
-publish = false
 edition.workspace = true
 license.workspace = true
+name = "stockhouse-lease"
+publish = false
 repository.workspace = true
 version.workspace = true

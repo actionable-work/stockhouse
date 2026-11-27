@@ -6,9 +6,9 @@ stockhouse-proto = { workspace = true }
 stockhouse-uploader-config = { workspace = true }
 
 [package]
-name = "stockhouse-ingest"
-publish = false
 edition.workspace = true
 license.workspace = true
+name = "stockhouse-ingest"
+publish = false
 repository.workspace = true
 version.workspace = true

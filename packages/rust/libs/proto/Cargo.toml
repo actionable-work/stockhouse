@@ -8,9 +8,9 @@ uuid = { workspace = true }
 ed25519-dalek = { workspace = true }
 
 [package]
-name = "stockhouse-proto"
-publish = false
 edition.workspace = true
 license.workspace = true
+name = "stockhouse-proto"
+publish = false
 repository.workspace = true
 version.workspace = true

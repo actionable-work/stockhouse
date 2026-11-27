@@ -6,6 +6,7 @@
 {
   pkgs,
   module,
+  nixVersions,
 }: let
   inherit (pkgs) lib;
   keyName = "stockhouse-vm-fixture-1";
@@ -259,9 +260,9 @@
   # The sign-in node module: fake OAuth server and sealed server sign-in.
   authModule = import ./auth.nix {inherit pkgs lib keyName publicKey;};
 
-  nixVersions = {
-    "nix-2_34" = pkgs.nixVersions.nix_2_34;
-    "nix-2_31" = pkgs.nixVersions.nix_2_31;
+  nixPackages = {
+    "nix-2_34" = nixVersions.nix_2_34;
+    "nix-2_31" = nixVersions.nix_2_31;
   };
 in {
   # One check per pinned Nix version: `vm-<story>-<nix version>`.
@@ -289,5 +290,5 @@ in {
         testScript = prelude + script;
         inherit passthru;
       }))
-    nixVersions;
+    nixPackages;
 }

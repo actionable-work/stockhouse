@@ -306,9 +306,11 @@ The flake exposes outputs for `x86_64-linux` only.
 The VM tests run the whole client against two repo-pinned Nix versions, each
 used as both the client and the daemon (`nix.package`):
 
-- Nix 2.34.8 (`nixVersions.nix_2_34`, nixpkgs' current stable);
-- Nix 2.31.5 (`nixVersions.nix_2_31`, the oldest pinned release still in
-  nixpkgs).
+- Nix 2.34.8 (`nixVersions.nix_2_34`);
+- Nix 2.31.5 (`nixVersions.nix_2_31`).
+
+The test-only `nixpkgs-vm-nix` input pins the Nix packages independently of
+the nixpkgs revision used for the VM and the client build.
 
 ## VM qualification
 

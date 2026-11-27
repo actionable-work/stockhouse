@@ -4,9 +4,9 @@ stockhouse-ingest = { workspace = true }
 stockhouse-proto = { workspace = true }
 
 [package]
-name = "stockhouse-test-support"
-publish = false
 edition.workspace = true
 license.workspace = true
+name = "stockhouse-test-support"
+publish = false
 repository.workspace = true
 version.workspace = true
